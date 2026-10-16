@@ -19,7 +19,7 @@ export const options = {
   }
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:3000';
+const BASE_URL = __ENV.BASE_URL || 'http://0.0.0.0:3000';
 
 export default function () {
   const res = http.get(`${BASE_URL}/api/v1/gigs?student_corridor=SOVIMA_6MILE`);

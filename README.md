@@ -30,7 +30,7 @@ You can connect your **Neon PostgreSQL (`DATABASE_URL`)** and **Google OAuth (`G
 Edit `/home/user/morunggig/.env`:
 ```env
 PORT=3000
-HOST=127.0.0.1
+HOST=0.0.0.0
 DATABASE_URL=postgresql://your_user:your_pass@ep-your-host.aws.neon.tech/neondb?sslmode=require
 GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-your-google-client-secret
