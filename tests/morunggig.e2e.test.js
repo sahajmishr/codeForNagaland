@@ -569,4 +569,158 @@ test('TC-32: Auth (Sign Up / Login / Cookies), Availability (FREE/WORKING/OFFLIN
   assert.equal(withdrawRes.json().data.withdrawal.amount_inr, -400);
 });
 
+test('TC-33: Custom Category, 3 Tweaks per Online Job, Multi-Format Blurred/Watermarked Vault, Full Offline Job Pipeline & 5-Star Rating (<=50 Words)', async () => {
+  // 1. Create an Online Job with OTHER_CUSTOM category & verify 3 Tweaks default
+  const customOnlineRes = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/gigs/create-and-lock',
+    payload: {
+      poster_id: 'USR-POS-01',
+      title: 'Drone Aerial Campus Tour & Brochure Layout',
+      description: 'Capture aerial clips and create a brochure PDF.',
+      track_category: 'OTHER_CUSTOM',
+      custom_category_label: 'Drone & Aerial Photography',
+      execution_mode: 'DIGITAL',
+      corridor_cluster: 'SOVIMA_6MILE',
+      payout_inr: 800,
+      criteria_1: 'Capture 3 aerial campus clips',
+      criteria_2: 'Export high-res brochure PDF',
+      criteria_3: 'Upload to protected watermarked vault'
+    }
+  });
+  assert.equal(customOnlineRes.statusCode, 201);
+  const onlineGig = customOnlineRes.json().data;
+  assert.equal(onlineGig.track_name, 'Custom: Drone & Aerial Photography');
+  assert.equal(onlineGig.revisions_left, 3);
+  assert.equal(onlineGig.max_tweaks, 3);
+
+  // 2. Verify Applicants on GIG-NL-2026-101 are sorted by highest avg_rating descending
+  const g101 = (await fastify.inject({ method: 'GET', url: '/api/v1/gigs' })).json().data.find((x) => x.gig_id === 'GIG-NL-2026-101');
+  assert.ok(g101.applicants.length >= 2);
+  assert.ok(g101.applicants[0].avg_rating >= g101.applicants[1].avg_rating);
+
+  // 3. Assign custom online job to USR-STU-03 and upload IMAGE deliverable with blurrification + watermark
+  await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/gigs/${onlineGig.gig_id}/assign`,
+    payload: { actor_id: 'USR-POS-01', lead_student_id: 'USR-STU-03', execution_type: 'SOLO' }
+  });
+
+  const vaultImgRes = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/vault/${onlineGig.gig_id}/deliver`,
+    payload: {
+      actor_id: 'USR-STU-03',
+      media_type: 'IMAGE',
+      deliverable_title: 'Aerial_Brochure_Cover.png',
+      preview_summary: 'High-res cover image submitted',
+      criteria_checked: [true, true, true]
+    }
+  });
+  assert.equal(vaultImgRes.statusCode, 200);
+  const vp = vaultImgRes.json().data.vault_protection;
+  assert.equal(vp.media_type, 'IMAGE');
+  assert.equal(vp.watermark_active, true);
+  assert.equal(vp.blur_active, true);
+  assert.equal(vp.no_download_active, true);
+  assert.equal(vp.no_screenshot_active, true);
+
+  // 4. Test 3 Tweaks on the online job (3 -> 2 -> 1 -> 0)
+  for (let expectedLeft = 2; expectedLeft >= 0; expectedLeft--) {
+    const twRes = await fastify.inject({
+      method: 'POST',
+      url: `/api/v1/vault/${onlineGig.gig_id}/revision`,
+      payload: { actor_id: 'USR-POS-01', checkbox_index: 2, revision_note: `Tweak request leaving ${expectedLeft}` }
+    });
+    assert.equal(twRes.statusCode, 200);
+    assert.equal(twRes.json().revisions_left, expectedLeft);
+
+    await fastify.inject({
+      method: 'POST',
+      url: `/api/v1/vault/${onlineGig.gig_id}/deliver`,
+      payload: {
+        actor_id: 'USR-STU-03',
+        media_type: 'IMAGE',
+        deliverable_title: `Aerial_Brochure_v${3 - expectedLeft}.png`,
+        criteria_checked: [true, true, true]
+      }
+    });
+  }
+
+  // 5. Create & Execute a Brand-New OFFLINE Job End-to-End (Post -> Assign -> START_PIN -> COMPLETE_PIN -> Rate <=50 words)
+  const offlineCreateRes = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/gigs/create-and-lock',
+    payload: {
+      poster_id: 'USR-POS-01',
+      title: 'Saturday Coffee Tasting Booth Setup at Sovima Hub',
+      description: 'Physical on-site stall setup and customer sampling.',
+      track_category: 'EVENTS_STALLS',
+      execution_mode: 'OFFLINE',
+      corridor_cluster: 'SOVIMA_6MILE',
+      venue_label: 'Yes Coffee Sovima Public Courtyard',
+      scheduled_end_hour: 16,
+      payout_inr: 600,
+      criteria_1: 'Check in at 10 AM with START_PIN',
+      criteria_2: 'Manage coffee tasting booth for 4 hours',
+      criteria_3: 'Complete closing inventory with COMPLETE_PIN'
+    }
+  });
+  assert.equal(offlineCreateRes.statusCode, 201);
+  const offGigId = offlineCreateRes.json().gig_id;
+
+  const offAssignRes = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/gigs/${offGigId}/assign`,
+    payload: { actor_id: 'USR-POS-01', lead_student_id: 'USR-STU-04', execution_type: 'SOLO' }
+  });
+  assert.equal(offAssignRes.statusCode, 200);
+  const assignedOffGig = offAssignRes.json().data;
+  assert.equal(assignedOffGig.state, 'ASSIGNED_OFFLINE');
+  assert.ok(assignedOffGig.start_pin);
+  assert.ok(assignedOffGig.complete_pin);
+
+  // Step 1: Verify START_PIN
+  const startPinRes = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/gigs/${offGigId}/onsite/pin-handshake`,
+    payload: { actor_id: 'USR-STU-04', pin_type: 'START_PIN', pin_entered: assignedOffGig.start_pin }
+  });
+  assert.equal(startPinRes.statusCode, 200);
+  assert.equal(startPinRes.json().data.gig.state, 'IN_PROGRESS_ONSITE');
+
+  // Step 2: Verify COMPLETE_PIN -> Settles Escrow & Marks Job DELETED
+  const compPinRes = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/gigs/${offGigId}/onsite/pin-handshake`,
+    payload: { actor_id: 'USR-STU-04', pin_type: 'COMPLETE_PIN', pin_entered: assignedOffGig.complete_pin }
+  });
+  assert.equal(compPinRes.statusCode, 200);
+  assert.equal(compPinRes.json().data.gig.lifecycle_status, 'DELETED');
+
+  // 6. Rate Settled Job: >50 words rejected with 422 ERR-MG-RATING-WORDS, <=50 words accepted & updates avg_rating
+  const tooLongFeedback = Array(55).fill('word').join(' ');
+  const badRateRes = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/gigs/${offGigId}/rate`,
+    payload: { actor_id: 'USR-POS-01', rating_score: 5, rating_feedback: tooLongFeedback }
+  });
+  assert.equal(badRateRes.statusCode, 422);
+  assert.equal(badRateRes.json().error.code, 'ERR-MG-RATING-WORDS');
+
+  const okRateRes = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/gigs/${offGigId}/rate`,
+    payload: {
+      actor_id: 'USR-POS-01',
+      rating_score: 5,
+      rating_feedback: 'Punctual arrival at Sovima courtyard, managed the coffee tasting booth professionally and completed inventory accurately.'
+    }
+  });
+  assert.equal(okRateRes.statusCode, 200);
+  assert.equal(okRateRes.json().data.rating_score, 5);
+  assert.ok(okRateRes.json().student.avg_rating >= 4.9);
+});
+
+
 

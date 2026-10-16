@@ -70,6 +70,19 @@ const NAGALAND_CONFIG = {
       recommendedMaxInr: 3000,
       typicalDuration: '4 – 24 Hours',
       nonTechFriendly: false
+    },
+    OTHER_CUSTOM: {
+      code: 'OTHER_CUSTOM',
+      name: 'Other / Custom Specialized Task',
+      shortName: 'Custom Task',
+      portfolioTitle: 'Specialized Campus & Community Operations Fellowship',
+      edcPillar: 'YouthNet EDC Pillar VI: Custom Applied Enterprise & Community Operations',
+      streamEligibility: 'All Streams',
+      minFloorInr: 300,
+      recommendedMinInr: 400,
+      recommendedMaxInr: 3000,
+      typicalDuration: 'Flexible',
+      nonTechFriendly: true
     }
   },
 

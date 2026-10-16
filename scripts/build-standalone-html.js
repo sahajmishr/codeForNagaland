@@ -194,6 +194,10 @@ ${validationContent}
     ...u,
     visible_phone: u.contact_phone || u.masked_phone,
     trust_score: Number(u.trust_score),
+    avg_rating: Number(u.avg_rating ?? 5.0),
+    ratings_count: Number(u.ratings_count ?? 1),
+    reviews: JSON.parse(u.reviews_json || '[]'),
+    proficiencies: JSON.parse(u.proficiencies_json || '[]'),
     completed_gigs_cnt: Number(u.completed_gigs_cnt),
     wallet_balance_inr: Number(u.wallet_balance_inr),
     availability_status: getStuAvailability(u),
@@ -244,23 +248,33 @@ ${validationContent}
     const isUnlocked = gig.state === 'SETTLED' || gig.state === 'AUTO_RELEASED';
 
     const rawApplicants = JSON.parse(gig.applicants_json || '[]');
-    const enrichedApplicants = rawApplicants.map((app) => {
-      const stu = localDb.users.find((u) => u.user_id === app.student_id);
-      return {
-        ...app,
-        availability_status: stu ? getStuAvailability(stu) : 'FREE'
-      };
-    });
+    const enrichedApplicants = rawApplicants
+      .map((app) => {
+        const stu = localDb.users.find((u) => u.user_id === app.student_id);
+        const sStu = stu ? sanitizeUser(stu) : null;
+        return {
+          ...app,
+          availability_status: stu ? getStuAvailability(stu) : 'FREE',
+          completed_gigs_cnt: sStu ? sStu.completed_gigs_cnt : 0,
+          avg_rating: sStu ? sStu.avg_rating : 5.0,
+          proficiencies: sStu ? sStu.proficiencies : [],
+          reviews: sStu ? sStu.reviews : []
+        };
+      })
+      .sort((a, b) => b.avg_rating - a.avg_rating || b.completed_gigs_cnt - a.completed_gigs_cnt);
 
     return {
       ...gig,
       description: gig.description || (gig.title + ' — ' + gig.criteria_1),
+      custom_category_label: gig.custom_category_label || '',
       lifecycle_status: getGigLifecycle(gig),
       applicants: enrichedApplicants,
       payout_inr: Number(gig.payout_inr),
       platform_fee_inr: Number(gig.platform_fee_inr),
-      revisions_left: Number(gig.revisions_left ?? 2),
-      track_name: trackSpec.shortName,
+      revisions_left: Number(gig.revisions_left ?? 3),
+      max_tweaks: Number(gig.max_tweaks ?? 3),
+      revision_notes: JSON.parse(gig.revision_notes_json || '[]'),
+      track_name: gig.custom_category_label ? ('Custom: ' + gig.custom_category_label) : trackSpec.shortName,
       edc_pillar: trackSpec.edcPillar,
       corridor_label: corridorSpec.label,
       safety_dispatch: cfg.SAFETY_DISPATCH_UNITS[gig.corridor_cluster] || cfg.SAFETY_DISPATCH_UNITS.SOVIMA_6MILE,
@@ -632,9 +646,15 @@ ${validationContent}
       const sha = pureSha256Hex(gig.gig_id + Date.now());
       gig.vault_payload_json = JSON.stringify({
         deliverable_title: body.deliverable_title || (gig.gig_id + '_Master.mp4'),
+        media_type: body.media_type || 'DOCUMENT',
+        preview_summary: body.preview_summary || 'Completed deliverable fulfilling all 3 criteria',
+        file_data_uri: body.file_data_uri || null,
         file_sha256: sha,
         criteria_checked: [true, true, true],
-        tabular_rows: []
+        tabular_rows: [
+          { row: 1, item: 'SKU-NL-001 • Verified Entry Row 1', cost: '₹180', price: '₹320', margin: '43.7%', status: 'VERIFIED' },
+          { row: 2, item: 'SKU-NL-002 • Verified Entry Row 2', cost: '₹95', price: '₹190', margin: '50.0%', status: 'VERIFIED' }
+        ]
       });
       appendLog(gig.gig_id, 'USR-STU-01', 'CHECKPOINT_VERIFIED', 'DELIVERED_VAULT', 'Uploaded to Watermarked Vault; 36h Timer started', sha);
       saveDb();
@@ -653,9 +673,39 @@ ${validationContent}
       const gig = localDb.gigs.find((g) => g.gig_id === decodeURIComponent(revMatch[1]));
       if (gig.revisions_left <= 0) throw cfg.ERRORS['ERR-MG-4002'];
       gig.revisions_left -= 1; gig.state = 'CHECKPOINT_VERIFIED';
-      appendLog(gig.gig_id, gig.poster_id, 'DELIVERED_VAULT', 'CHECKPOINT_VERIFIED', 'Revision requested (' + gig.revisions_left + '/2 left)', 'REV');
+      const rNotes = JSON.parse(gig.revision_notes_json || '[]');
+      rNotes.push({ checkbox: body.checkbox_index || 2, note: body.revision_note || 'Tweak requested', at: new Date().toISOString() });
+      gig.revision_notes_json = JSON.stringify(rNotes);
+      appendLog(gig.gig_id, gig.poster_id, 'DELIVERED_VAULT', 'CHECKPOINT_VERIFIED', 'Tweak requested (' + gig.revisions_left + ' left)', 'REV');
       saveDb();
       return { success: true, revisions_left: gig.revisions_left, data: enrichGig(gig) };
+    }
+
+    const rateMatch = pathname.match(/^\\/api\\/v1\\/gigs\\/([^/]+)\\/rate$/);
+    if (rateMatch) {
+      const gig = localDb.gigs.find((g) => g.gig_id === decodeURIComponent(rateMatch[1]));
+      const score = Math.round(Number(body.rating_score || 5));
+      const feedback = String(body.rating_feedback || 'Completed all deliverables accurately.');
+      gig.rating_score = score;
+      gig.rating_feedback = feedback;
+      gig.rated_at = new Date().toISOString();
+      const stu = localDb.users.find((u) => u.user_id === gig.assigned_lead_id);
+      if (stu) {
+        const revs = JSON.parse(stu.reviews_json || '[]').filter((r) => r.gig_id !== gig.gig_id);
+        revs.unshift({
+          gig_id: gig.gig_id,
+          gig_title: gig.title,
+          poster_name: 'Verified Poster',
+          rating_score: score,
+          feedback_text: feedback,
+          rated_at: gig.rated_at
+        });
+        stu.reviews_json = JSON.stringify(revs);
+        stu.ratings_count = revs.length;
+        stu.avg_rating = Number((revs.reduce((s, r) => s + Number(r.rating_score), 0) / revs.length).toFixed(2));
+      }
+      saveDb();
+      return { success: true, data: enrichGig(gig) };
     }
 
     const topupMatch = pathname.match(/^\\/api\\/v1\\/gigs\\/([^/]+)\\/topup-revision$/);

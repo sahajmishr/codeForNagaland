@@ -233,8 +233,9 @@ class MorungDatabase {
             user_id, role, full_name, email, password_hash, google_sub, institution_or_org, stream_or_sector,
             corridor_cluster, kyc_id_hash, upi_vpa, masked_phone, contact_phone, trust_score,
             completed_gigs_cnt, wallet_balance_inr, exam_freeze_active, nda_accepted,
-            availability_status, bio, wallet_transactions_json, free_slots_json, skills_json, created_at
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+            availability_status, bio, avg_rating, ratings_count, reviews_json, proficiencies_json,
+            wallet_transactions_json, free_slots_json, skills_json, created_at
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
           ON CONFLICT (user_id) DO UPDATE SET
             full_name = EXCLUDED.full_name,
             email = EXCLUDED.email,
@@ -250,6 +251,10 @@ class MorungDatabase {
             nda_accepted = EXCLUDED.nda_accepted,
             availability_status = EXCLUDED.availability_status,
             bio = EXCLUDED.bio,
+            avg_rating = EXCLUDED.avg_rating,
+            ratings_count = EXCLUDED.ratings_count,
+            reviews_json = EXCLUDED.reviews_json,
+            proficiencies_json = EXCLUDED.proficiencies_json,
             wallet_transactions_json = EXCLUDED.wallet_transactions_json,
             free_slots_json = EXCLUDED.free_slots_json,
             skills_json = EXCLUDED.skills_json`,
@@ -259,7 +264,9 @@ class MorungDatabase {
             u.upi_vpa, u.masked_phone, u.contact_phone || null, Number(u.trust_score),
             Number(u.completed_gigs_cnt), Number(u.wallet_balance_inr), Boolean(u.exam_freeze_active),
             Boolean(u.nda_accepted), u.availability_status || 'FREE', u.bio || '',
-            u.wallet_transactions_json || '[]', u.free_slots_json || '[]', u.skills_json || '[]',
+            Number(u.avg_rating ?? 5.0), Number(u.ratings_count ?? 1), u.reviews_json || '[]',
+            u.proficiencies_json || '[]', u.wallet_transactions_json || '[]',
+            u.free_slots_json || '[]', u.skills_json || '[]',
             u.created_at || new Date().toISOString()
           ]
         );
@@ -268,20 +275,22 @@ class MorungDatabase {
       for (const g of this.state.gigs) {
         await client.query(
           `INSERT INTO gigs (
-            gig_id, poster_id, poster_type, title, description, portfolio_title, track_category, execution_mode,
+            gig_id, poster_id, poster_type, title, description, portfolio_title, track_category, custom_category_label, execution_mode,
             corridor_cluster, venue_label, is_public_venue, is_church_event, scheduled_day, scheduled_end_hour,
             payout_inr, platform_fee_inr, extra_scope_topup_inr, duration_label, required_slot, language_tag,
             requires_nda, criteria_1, criteria_2, criteria_3, allow_morung_squad, state,
             lifecycle_status, applicants_json, execution_type,
             assigned_lead_id, assigned_junior_id, standby_buddy_id, checkpoint_note, checkpoint_at,
-            revisions_left, revision_notes_json, start_pin, complete_pin, safety_beacon_active,
-            onsite_started_at, vault_payload_json, dispute_reason, disputed_checkbox, auto_release_at, created_at
+            revisions_left, max_tweaks, revision_notes_json, start_pin, complete_pin, safety_beacon_active,
+            onsite_started_at, vault_payload_json, dispute_reason, disputed_checkbox,
+            rating_score, rating_feedback, rated_at, auto_release_at, created_at
           ) VALUES (
             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-            $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45
+            $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50
           )
           ON CONFLICT (gig_id) DO UPDATE SET
             description = EXCLUDED.description,
+            custom_category_label = EXCLUDED.custom_category_label,
             state = EXCLUDED.state,
             lifecycle_status = EXCLUDED.lifecycle_status,
             applicants_json = EXCLUDED.applicants_json,
@@ -292,6 +301,7 @@ class MorungDatabase {
             checkpoint_note = EXCLUDED.checkpoint_note,
             checkpoint_at = EXCLUDED.checkpoint_at,
             revisions_left = EXCLUDED.revisions_left,
+            max_tweaks = EXCLUDED.max_tweaks,
             revision_notes_json = EXCLUDED.revision_notes_json,
             start_pin = EXCLUDED.start_pin,
             complete_pin = EXCLUDED.complete_pin,
@@ -300,10 +310,13 @@ class MorungDatabase {
             vault_payload_json = EXCLUDED.vault_payload_json,
             dispute_reason = EXCLUDED.dispute_reason,
             disputed_checkbox = EXCLUDED.disputed_checkbox,
+            rating_score = EXCLUDED.rating_score,
+            rating_feedback = EXCLUDED.rating_feedback,
+            rated_at = EXCLUDED.rated_at,
             auto_release_at = EXCLUDED.auto_release_at,
             extra_scope_topup_inr = EXCLUDED.extra_scope_topup_inr`,
           [
-            g.gig_id, g.poster_id, g.poster_type, g.title, g.description || '', g.portfolio_title, g.track_category, g.execution_mode,
+            g.gig_id, g.poster_id, g.poster_type, g.title, g.description || '', g.portfolio_title, g.track_category, g.custom_category_label || '', g.execution_mode,
             g.corridor_cluster, g.venue_label, Boolean(g.is_public_venue), Boolean(g.is_church_event),
             g.scheduled_day || 'SATURDAY', Number(g.scheduled_end_hour ?? 16), Number(g.payout_inr),
             Number(g.platform_fee_inr), Number(g.extra_scope_topup_inr || 0), g.duration_label, g.required_slot,
@@ -311,10 +324,11 @@ class MorungDatabase {
             Boolean(g.allow_morung_squad), g.state, g.lifecycle_status || 'ACTIVE', g.applicants_json || '[]',
             g.execution_type || 'SOLO', g.assigned_lead_id || null,
             g.assigned_junior_id || null, g.standby_buddy_id || null, g.checkpoint_note || null,
-            g.checkpoint_at || null, Number(g.revisions_left ?? 2), g.revision_notes_json || '[]',
+            g.checkpoint_at || null, Number(g.revisions_left ?? 3), Number(g.max_tweaks ?? 3), g.revision_notes_json || '[]',
             g.start_pin || null, g.complete_pin || null, Boolean(g.safety_beacon_active),
             g.onsite_started_at || null, g.vault_payload_json || null, g.dispute_reason || null,
-            g.disputed_checkbox || null, g.auto_release_at || null, g.created_at || new Date().toISOString()
+            g.disputed_checkbox || null, g.rating_score || null, g.rating_feedback || null, g.rated_at || null,
+            g.auto_release_at || null, g.created_at || new Date().toISOString()
           ]
         );
       }

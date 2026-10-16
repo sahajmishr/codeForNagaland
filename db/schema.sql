@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS users (
     nda_accepted             BOOLEAN NOT NULL DEFAULT FALSE,
     availability_status      VARCHAR(24) NOT NULL DEFAULT 'FREE',
     bio                      TEXT NOT NULL DEFAULT '',
+    avg_rating               DECIMAL(3,2) NOT NULL DEFAULT 5.00,
+    ratings_count            INT NOT NULL DEFAULT 1,
+    reviews_json             TEXT NOT NULL DEFAULT '[]',
+    proficiencies_json       TEXT NOT NULL DEFAULT '[]',
     wallet_transactions_json TEXT NOT NULL DEFAULT '[]',
     free_slots_json          TEXT NOT NULL DEFAULT '[]',
     skills_json              TEXT NOT NULL DEFAULT '[]',
@@ -36,6 +40,10 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(128);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS availability_status VARCHAR(24) NOT NULL DEFAULT 'FREE';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avg_rating DECIMAL(3,2) NOT NULL DEFAULT 5.00;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ratings_count INT NOT NULL DEFAULT 1;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reviews_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS proficiencies_json TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_transactions_json TEXT NOT NULL DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS gigs (
@@ -45,7 +53,8 @@ CREATE TABLE IF NOT EXISTS gigs (
     title                VARCHAR(140) NOT NULL,
     description          TEXT NOT NULL DEFAULT '',
     portfolio_title      VARCHAR(140) NOT NULL,
-    track_category       VARCHAR(32) NOT NULL CHECK (track_category IN ('COMMERCE_OPS', 'CONTENT_REELS', 'EVENTS_STALLS', 'LANGUAGE_TUTOR', 'DIGITAL_TECH')),
+    track_category       VARCHAR(32) NOT NULL CHECK (track_category IN ('COMMERCE_OPS', 'CONTENT_REELS', 'EVENTS_STALLS', 'LANGUAGE_TUTOR', 'DIGITAL_TECH', 'OTHER_CUSTOM')),
+    custom_category_label VARCHAR(120) NOT NULL DEFAULT '',
     execution_mode       VARCHAR(16) NOT NULL CHECK (execution_mode IN ('DIGITAL', 'OFFLINE')),
     corridor_cluster     VARCHAR(40) NOT NULL CHECK (corridor_cluster IN ('SOVIMA_6MILE', 'CHUMOUKEDIMA', 'DIMAPUR_TOWN', 'KOHIMA_TOWN', 'JOTSOMA_MERIEMA')),
     venue_label          VARCHAR(140) NOT NULL,
@@ -77,7 +86,8 @@ CREATE TABLE IF NOT EXISTS gigs (
     standby_buddy_id     VARCHAR(32) REFERENCES users(user_id),
     checkpoint_note      TEXT,
     checkpoint_at        TIMESTAMPTZ,
-    revisions_left       INT NOT NULL DEFAULT 2 CHECK (revisions_left BETWEEN 0 AND 2),
+    revisions_left       INT NOT NULL DEFAULT 3 CHECK (revisions_left BETWEEN 0 AND 10),
+    max_tweaks           INT NOT NULL DEFAULT 3,
     revision_notes_json  TEXT NOT NULL DEFAULT '[]',
     start_pin            CHAR(4),
     complete_pin         CHAR(4),
@@ -86,13 +96,21 @@ CREATE TABLE IF NOT EXISTS gigs (
     vault_payload_json   TEXT,
     dispute_reason       VARCHAR(250),
     disputed_checkbox    INT,
+    rating_score         INT,
+    rating_feedback      TEXT,
+    rated_at             TIMESTAMPTZ,
     auto_release_at      TIMESTAMPTZ,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 ALTER TABLE gigs ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+ALTER TABLE gigs ADD COLUMN IF NOT EXISTS custom_category_label VARCHAR(120) NOT NULL DEFAULT '';
 ALTER TABLE gigs ADD COLUMN IF NOT EXISTS lifecycle_status VARCHAR(24) NOT NULL DEFAULT 'ACTIVE';
 ALTER TABLE gigs ADD COLUMN IF NOT EXISTS applicants_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE gigs ADD COLUMN IF NOT EXISTS max_tweaks INT NOT NULL DEFAULT 3;
+ALTER TABLE gigs ADD COLUMN IF NOT EXISTS rating_score INT;
+ALTER TABLE gigs ADD COLUMN IF NOT EXISTS rating_feedback TEXT;
+ALTER TABLE gigs ADD COLUMN IF NOT EXISTS rated_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS escrow_ledger (
     escrow_id            VARCHAR(32) PRIMARY KEY,

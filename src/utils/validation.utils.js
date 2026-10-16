@@ -315,6 +315,7 @@ function validateGigCreationInput(rawInput, posterUser) {
   const criteria2 = stripHtmlAndNormalize(rawInput.criteria_2 || '');
   const criteria3 = stripHtmlAndNormalize(rawInput.criteria_3 || '');
   const trackCategory = rawInput.track_category || 'CONTENT_REELS';
+  const customCategoryLabel = stripHtmlAndNormalize(rawInput.custom_category_label || '');
   const executionMode = rawInput.execution_mode || 'DIGITAL';
   const corridorCluster = rawInput.corridor_cluster || 'SOVIMA_6MILE';
   const payoutInr = Math.round(Number(rawInput.payout_inr) || 0);
@@ -382,6 +383,7 @@ function validateGigCreationInput(rawInput, posterUser) {
       portfolio_title: rawInput.portfolio_title ? stripHtmlAndNormalize(rawInput.portfolio_title) : trackSpec.portfolioTitle,
       poster_type: posterType,
       track_category: trackCategory,
+      custom_category_label: customCategoryLabel,
       execution_mode: executionMode,
       corridor_cluster: corridorCluster,
       venue_label: venueLabel || 'Verified Campus / Commercial Hub',

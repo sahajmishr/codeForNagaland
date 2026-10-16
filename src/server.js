@@ -158,8 +158,24 @@ function buildServer(options = {}) {
   }));
 
   // ==========================================================================
-  // 3. BOOTSTRAP & SYSTEM CLOUD CONFIGURATION (NEON DB + GOOGLE OAUTH)
+  // 3. BOOTSTRAP, REAL-TIME SSE STREAM & SYSTEM CLOUD CONFIGURATION
   // ==========================================================================
+  fastify.get('/api/v1/events/version', async () => ({
+    success: true,
+    data: { version: engine.stateVersion, timestamp: new Date().toISOString() }
+  }));
+
+  fastify.get('/api/v1/events/stream', (req, reply) => {
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    reply.raw.write(`data: ${JSON.stringify({ event: 'CONNECTED', version: engine.stateVersion })}\n\n`);
+    engine.addSseClient(reply.raw);
+  });
+
   fastify.get('/api/v1/bootstrap', async (req) => {
     const studentCorridor = req.query.student_corridor || 'SOVIMA_6MILE';
     const viewerId = req.query.viewer_id || (req.user ? req.user.sub : 'USR-STU-01');
@@ -592,6 +608,34 @@ function buildServer(options = {}) {
     return {
       success: true,
       data: res,
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  });
+
+  // View Public User / Student Applicant Profile (Avg Rating, Skills, Proficiencies, Completed Jobs, Past Reviews)
+  fastify.get('/api/v1/users/:userId', async (req, reply) => {
+    const viewerId = (req.user && req.user.sub) || req.headers['x-morung-actor-id'] || null;
+    const target = db.state.users.find((u) => u.user_id === req.params.userId);
+    if (!target) {
+      return sendError(reply, { code: 'ERR-MG-404', status: 404, title: 'User Not Found', detail: 'User profile not found.' }, req.requestId);
+    }
+    return {
+      success: true,
+      data: engine.sanitizeUserForView(target, viewerId),
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  });
+
+  // Rate & Review Settled Job (1-5 Stars + Max 50 Words Feedback)
+  fastify.post('/api/v1/gigs/:gigId/rate', async (req, reply) => {
+    const body = req.body || {};
+    const actor_id = body.actor_id || (req.user && req.user.sub) || req.headers['x-morung-actor-id'];
+    const res = await engine.rateSettledGig(req.params.gigId, { ...body, actor_id });
+    if (!res.ok) return sendError(reply, res.error, req.requestId);
+    return {
+      success: true,
+      data: res.gig,
+      student: res.student,
       meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
     };
   });

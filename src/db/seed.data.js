@@ -769,9 +769,18 @@ function buildInitialSeedState() {
     if (!g.description) {
       g.description = `${g.title}. Location: ${g.venue_label} (${g.corridor_cluster}). Turnaround: ${g.duration_label}. All 3 acceptance deliverables must be completed to release the locked ₹${g.payout_inr} escrow.`;
     }
+    g.custom_category_label = g.custom_category_label || '';
+    g.max_tweaks = g.max_tweaks || 3;
     if (g.state === 'ESCROW_LOCKED') {
       g.lifecycle_status = 'ACTIVE';
       g.applicants_json = JSON.stringify([
+        {
+          student_id: 'USR-STU-04',
+          full_name: 'Kevisezo Angami',
+          institution: 'Kohima Science College (Autonomous), Jotsoma',
+          pitch_note: 'Experienced in digital production, bilingual transcription, and fast 24h turnaround.',
+          applied_at: yesterday
+        },
         {
           student_id: 'USR-STU-03',
           full_name: 'Sentila Jamir',
@@ -783,15 +792,108 @@ function buildInitialSeedState() {
     } else if (['SETTLED', 'AUTO_RELEASED', 'REFUNDED'].includes(g.state)) {
       g.lifecycle_status = 'DELETED';
       g.applicants_json = '[]';
+      g.rating_score = g.rating_score || 5;
+      g.rating_feedback = g.rating_feedback || 'Delivered all 3 inventory and GST reconciliation sheets ahead of schedule with zero errors.';
+      g.rated_at = g.rated_at || yesterday;
     } else {
       g.lifecycle_status = 'ASSIGNED';
       g.applicants_json = '[]';
     }
   });
 
+  const seedRatingsMap = {
+    'USR-STU-01': {
+      avg_rating: 4.95,
+      ratings_count: 6,
+      proficiencies: [
+        { skill: 'Short-Form Video & Reels', level: 'Expert (98%)' },
+        { skill: 'MSME Stock & Excel Audit', level: 'Advanced (95%)' },
+        { skill: 'Event & Stall Operations', level: 'Expert (96%)' }
+      ],
+      reviews: [
+        {
+          gig_id: 'GIG-NL-2026-100',
+          gig_title: 'Retail Store Inventory Count & GST Excel Reconciliation',
+          poster_name: 'Yes Coffee Sovima',
+          rating_score: 5,
+          feedback_text: 'Delivered all 3 inventory and GST reconciliation sheets ahead of schedule with zero errors.',
+          rated_at: yesterday
+        }
+      ]
+    },
+    'USR-STU-02': {
+      avg_rating: 4.75,
+      ratings_count: 2,
+      proficiencies: [
+        { skill: 'Excel Billing & Tally', level: 'Intermediate (88%)' },
+        { skill: 'Event POS Support', level: 'Advanced (90%)' }
+      ],
+      reviews: [
+        {
+          gig_id: 'GIG-NL-2026-100',
+          gig_title: 'Retail Store Inventory Count & GST Excel Reconciliation',
+          poster_name: 'Yes Coffee Sovima',
+          rating_score: 5,
+          feedback_text: 'Diligent Morung Squad junior apprentice; verified physical shelf counts accurately.',
+          rated_at: yesterday
+        }
+      ]
+    },
+    'USR-STU-03': {
+      avg_rating: 4.85,
+      ratings_count: 4,
+      proficiencies: [
+        { skill: 'Commerce & Stock Audit', level: 'Expert (94%)' },
+        { skill: 'Canva & Brand Catalogs', level: 'Advanced (91%)' },
+        { skill: 'NBSE Mathematics Tutoring', level: 'Advanced (92%)' }
+      ],
+      reviews: [
+        {
+          gig_id: 'GIG-NL-2026-094',
+          gig_title: '6th Mile Pharmacy Stock Ledger Audit',
+          poster_name: 'Yes Coffee Sovima',
+          rating_score: 5,
+          feedback_text: 'Very organized B.Com student, completed full SKU verification in 3 hours.',
+          rated_at: yesterday
+        }
+      ]
+    },
+    'USR-STU-04': {
+      avg_rating: 4.92,
+      ratings_count: 5,
+      proficiencies: [
+        { skill: 'Web, Canva & Digital Storefront', level: 'Expert (97%)' },
+        { skill: 'Tenyidie & English Translation', level: 'Expert (99%)' },
+        { skill: 'Video Editing & Subtitles', level: 'Advanced (93%)' }
+      ],
+      reviews: [
+        {
+          gig_id: 'GIG-NL-2026-091',
+          gig_title: 'Bilingual Tenyidie Archival Transcription',
+          poster_name: 'Tsüipu Artisanal Bakery & Crafts',
+          rating_score: 5,
+          feedback_text: 'Flawless Tenyidie to English document translation and clean PDF formatting.',
+          rated_at: yesterday
+        }
+      ]
+    }
+  };
+
   users.forEach((u) => {
     u.password_hash = u.password_hash || defaultPwdHash;
     u.bio = u.bio || `${u.stream_or_sector} at ${u.institution_or_org}`;
+    const rInfo = seedRatingsMap[u.user_id];
+    u.avg_rating = rInfo ? rInfo.avg_rating : 5.0;
+    u.ratings_count = rInfo ? rInfo.ratings_count : 1;
+    u.proficiencies_json = JSON.stringify(
+      rInfo
+        ? rInfo.proficiencies
+        : [
+            { skill: 'Campus Micro-Tasks & Operations', level: 'Verified (90%)' },
+            { skill: 'Digital & On-Site Execution', level: 'Verified (90%)' }
+          ]
+    );
+    u.reviews_json = JSON.stringify(rInfo ? rInfo.reviews : []);
     if (u.role === 'STUDENT') {
       u.availability_status = activeStudentIds.has(u.user_id) ? 'WORKING' : 'FREE';
     } else {

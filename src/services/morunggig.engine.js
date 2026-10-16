@@ -28,12 +28,38 @@ const {
 
 class MorungGigEngine {
   constructor() {
+    this.sseClients = new Set();
+    this.stateVersion = Date.now();
     this.workerMetrics = {
       'q.vault.watermark': { processed: 14, failed: 0, avgMs: 38, lastJobAt: new Date().toISOString() },
       'q.notify.outbox': { processed: 42, failed: 0, avgMs: 12, lastJobAt: new Date().toISOString() },
       'q.escrow.autorelease': { processed: 9, failed: 0, avgMs: 9, lastJobAt: new Date().toISOString() },
       'q.credential.mint': { processed: 18, failed: 0, avgMs: 24, lastJobAt: new Date().toISOString() }
     };
+  }
+
+  addSseClient(res) {
+    this.sseClients.add(res);
+    res.on('close', () => {
+      this.sseClients.delete(res);
+    });
+  }
+
+  broadcastRealtimeEvent(eventType, payload = {}) {
+    this.stateVersion = Date.now();
+    const message = JSON.stringify({
+      event: eventType,
+      version: this.stateVersion,
+      timestamp: new Date().toISOString(),
+      ...payload
+    });
+    for (const client of this.sseClients) {
+      try {
+        client.write(`data: ${message}\n\n`);
+      } catch {
+        this.sseClients.delete(client);
+      }
+    }
   }
 
   recordWorkerJob(queueName, durationMs = 18) {
@@ -90,6 +116,7 @@ class MorungGigEngine {
       logged_at: new Date().toISOString()
     };
     db.state.audit_logs.unshift(entry);
+    this.broadcastRealtimeEvent('AUDIT_LOG_APPENDED', { gig_id, actor_id, to_state, action_summary });
     return entry;
   }
 
@@ -112,6 +139,7 @@ class MorungGigEngine {
     };
     db.state.notifications_outbox.unshift(notif);
     this.recordWorkerJob('q.notify.outbox', 11);
+    this.broadcastRealtimeEvent('NOTIFICATION_SENT', { recipient_id, gig_id, title });
     return notif;
   }
 
@@ -133,9 +161,13 @@ class MorungGigEngine {
     let freeSlots = [];
     let skills = [];
     let walletTransactions = [];
+    let reviews = [];
+    let proficiencies = [];
     try { freeSlots = JSON.parse(user.free_slots_json || '[]'); } catch { freeSlots = []; }
     try { skills = JSON.parse(user.skills_json || '[]'); } catch { skills = []; }
     try { walletTransactions = JSON.parse(user.wallet_transactions_json || '[]'); } catch { walletTransactions = []; }
+    try { reviews = JSON.parse(user.reviews_json || '[]'); } catch { reviews = []; }
+    try { proficiencies = JSON.parse(user.proficiencies_json || '[]'); } catch { proficiencies = []; }
 
     const computedAvailability = this.getSystemComputedAvailability(user);
     const isSelf = viewerUserId && viewerUserId === user.user_id;
@@ -154,6 +186,15 @@ class MorungGigEngine {
       visible_phone: canSeeUnmaskedPhone ? (user.contact_phone || user.masked_phone) : user.masked_phone,
       contact_unmasked: canSeeUnmaskedPhone,
       trust_score: Number(user.trust_score),
+      avg_rating: Number(Number(user.avg_rating ?? 5.0).toFixed(2)),
+      ratings_count: Number(user.ratings_count ?? (reviews.length || 1)),
+      reviews,
+      proficiencies: proficiencies.length > 0
+        ? proficiencies
+        : skills.map((s) => ({
+            skill: NAGALAND_CONFIG.TRACKS[s] ? NAGALAND_CONFIG.TRACKS[s].shortName : s,
+            level: 'Verified (90%)'
+          })),
       completed_gigs_cnt: Number(user.completed_gigs_cnt),
       wallet_balance_inr: Number(user.wallet_balance_inr),
       exam_freeze_active: Boolean(user.exam_freeze_active),
@@ -390,6 +431,7 @@ class MorungGigEngine {
     student.availability_status = normalized;
     student.exam_freeze_active = normalized === 'OFFLINE';
     await db.commitMutation();
+    this.broadcastRealtimeEvent('AVAILABILITY_CHANGED', { user_id: student.user_id, availability_status: normalized });
 
     return {
       ok: true,
@@ -427,8 +469,12 @@ class MorungGigEngine {
     if (Array.isArray(updates.skills)) {
       user.skills_json = JSON.stringify(updates.skills);
     }
+    if (Array.isArray(updates.proficiencies)) {
+      user.proficiencies_json = JSON.stringify(updates.proficiencies);
+    }
 
     await db.commitMutation();
+    this.broadcastRealtimeEvent('PROFILE_UPDATED', { user_id: user.user_id });
     return {
       ok: true,
       user: this.sanitizeUserForView(user, user.user_id)
@@ -659,31 +705,52 @@ class MorungGigEngine {
       }
     }
 
-    const applicants = rawApplicants.map((app) => {
-      const stu = db.state.users.find((u) => u.user_id === app.student_id);
-      return {
-        ...app,
-        full_name: stu ? stu.full_name : app.full_name,
-        institution: stu ? stu.institution_or_org : app.institution,
-        availability_status: stu ? this.getSystemComputedAvailability(stu) : 'FREE',
-        completed_gigs_cnt: stu ? Number(stu.completed_gigs_cnt) : 0,
-        trust_score: stu ? Number(stu.trust_score) : 98.0
-      };
-    });
+    const applicants = rawApplicants
+      .map((app) => {
+        const stu = db.state.users.find((u) => u.user_id === app.student_id);
+        const sanitizedStu = stu ? this.sanitizeUserForView(stu, viewerUserId, gig) : null;
+        return {
+          ...app,
+          full_name: stu ? stu.full_name : app.full_name,
+          institution: stu ? stu.institution_or_org : app.institution,
+          stream_or_sector: stu ? stu.stream_or_sector : '',
+          corridor_cluster: stu ? stu.corridor_cluster : 'SOVIMA_6MILE',
+          bio: stu ? stu.bio : '',
+          availability_status: stu ? this.getSystemComputedAvailability(stu) : 'FREE',
+          completed_gigs_cnt: stu ? Number(stu.completed_gigs_cnt) : 0,
+          trust_score: stu ? Number(stu.trust_score) : 98.0,
+          avg_rating: sanitizedStu ? sanitizedStu.avg_rating : 5.0,
+          ratings_count: sanitizedStu ? sanitizedStu.ratings_count : 1,
+          proficiencies: sanitizedStu ? sanitizedStu.proficiencies : [],
+          skills: sanitizedStu ? sanitizedStu.skills : [],
+          reviews: sanitizedStu ? sanitizedStu.reviews : []
+        };
+      })
+      .sort((a, b) => {
+        if (b.avg_rating !== a.avg_rating) return b.avg_rating - a.avg_rating;
+        if (b.completed_gigs_cnt !== a.completed_gigs_cnt) return b.completed_gigs_cnt - a.completed_gigs_cnt;
+        return b.trust_score - a.trust_score;
+      });
 
     const lifecycleStatus = this.computeGigLifecycleStatus(gig);
     const isUnlocked = gig.state === 'SETTLED' || gig.state === 'AUTO_RELEASED';
+    const customLabel = stripHtmlAndNormalize(gig.custom_category_label || '');
 
     return {
       ...gig,
       description: gig.description || `${gig.title}. Location: ${gig.venue_label}. Turnaround: ${gig.duration_label || 'Flexible'}.`,
+      custom_category_label: customLabel,
       lifecycle_status: lifecycleStatus,
       applicants,
       payout_inr: Number(gig.payout_inr),
       platform_fee_inr: Number(gig.platform_fee_inr),
       total_escrow_locked_inr: Number(gig.payout_inr) + Number(gig.platform_fee_inr),
-      revisions_left: Number(gig.revisions_left ?? 2),
-      track_name: trackSpec.shortName,
+      revisions_left: Number(gig.revisions_left ?? 3),
+      max_tweaks: Number(gig.max_tweaks ?? 3),
+      rating_score: gig.rating_score ? Number(gig.rating_score) : null,
+      rating_feedback: gig.rating_feedback || null,
+      rated_at: gig.rated_at || null,
+      track_name: customLabel ? `Custom: ${customLabel}` : trackSpec.shortName,
       edc_pillar: trackSpec.edcPillar,
       corridor_label: corridorSpec.label,
       safety_dispatch: NAGALAND_CONFIG.SAFETY_DISPATCH_UNITS[gig.corridor_cluster] || NAGALAND_CONFIG.SAFETY_DISPATCH_UNITS.SOVIMA_6MILE,
@@ -697,6 +764,7 @@ class MorungGigEngine {
         gross_payout_inr: Number(gig.payout_inr),
         est_transport_inr: fareCalc.estTransportInr,
         net_take_home_inr: fareCalc.netTakeHomeInr,
+        interDistrict: fareCalc.interDistrict,
         inter_district: fareCalc.interDistrict,
         route_note: fareCalc.routeNote
       },
@@ -708,9 +776,12 @@ class MorungGigEngine {
         ? {
             ...vaultPayload,
             watermark_active: !isUnlocked,
+            blur_active: !isUnlocked,
+            no_download_active: !isUnlocked,
+            no_screenshot_active: !isUnlocked,
             watermark_text: isUnlocked
               ? 'CLEAN ORIGINAL MASTER UNLOCKED • ESCROW SETTLED'
-              : `MORUNGGIG UNPAID PREVIEW • ESCROW LOCKED • ${gig.gig_id}`,
+              : `MORUNGGIG ESCROW VAULT • UNPAID PREVIEW • DO NOT COPY OR SCREENSHOT • ${gig.gig_id}`,
             raw_download_unlocked: isUnlocked
           }
         : null,
@@ -817,6 +888,7 @@ class MorungGigEngine {
       description: stripHtmlAndNormalize(rawInput.description || `${s.title}. Location: ${s.venue_label}. Turnaround: ${s.duration_label}.`),
       portfolio_title: s.portfolio_title,
       track_category: s.track_category,
+      custom_category_label: s.custom_category_label || '',
       execution_mode: s.execution_mode,
       corridor_cluster: s.corridor_cluster,
       venue_label: s.venue_label,
@@ -844,7 +916,8 @@ class MorungGigEngine {
       standby_buddy_id: null,
       checkpoint_note: null,
       checkpoint_at: null,
-      revisions_left: 2,
+      revisions_left: rawInput.revisions_left !== undefined ? Number(rawInput.revisions_left) : 3,
+      max_tweaks: 3,
       revision_notes_json: '[]',
       start_pin: null,
       complete_pin: null,
@@ -1317,8 +1390,20 @@ class MorungGigEngine {
     }
 
     const deliverableTitle = stripHtmlAndNormalize(payload.deliverable_title || `${gig.gig_id}_Master_Deliverable.mp4`);
+    const mediaType = ['DOCUMENT', 'IMAGE', 'VIDEO', 'ARCHIVE_LINK'].includes(String(payload.media_type || '').toUpperCase())
+      ? String(payload.media_type).toUpperCase()
+      : deliverableTitle.match(/\.(pdf|doc|docx|xlsx|csv|txt)$/i)
+        ? 'DOCUMENT'
+        : deliverableTitle.match(/\.(png|jpg|jpeg|webp|svg)$/i)
+          ? 'IMAGE'
+          : deliverableTitle.match(/\.(mp4|mov|webm)$/i)
+            ? 'VIDEO'
+            : 'DOCUMENT';
     const deliverableType = payload.deliverable_type || (gig.track_category === 'COMMERCE_OPS' ? 'VISUAL_AND_TABULAR' : 'VISUAL_MEDIA');
     const previewSummary = stripHtmlAndNormalize(payload.preview_summary || `Complete deliverable fulfilling all 3 locked acceptance criteria for ${gig.title}`);
+    const fileDataUri = payload.file_data_uri && String(payload.file_data_uri).startsWith('data:')
+      ? String(payload.file_data_uri).slice(0, 350000)
+      : null;
     const fileSha256 = computeSha256(`${gig.gig_id}:${deliverableTitle}:${previewSummary}:${Date.now()}`);
     const now = new Date();
     const autoReleaseIso = new Date(now.getTime() + 36 * 3600 * 1000).toISOString();
@@ -1336,8 +1421,10 @@ class MorungGigEngine {
 
     const vaultObj = {
       deliverable_title: deliverableTitle,
+      media_type: mediaType,
       deliverable_type: deliverableType,
       preview_summary: previewSummary,
+      file_data_uri: fileDataUri,
       file_sha256: fileSha256,
       criteria_checked: [true, true, true],
       uploaded_by: payload.student_lead_id || gig.assigned_lead_id || 'USR-STU-01',
@@ -1887,6 +1974,109 @@ class MorungGigEngine {
       },
       minted_credentials: mintedCredentials,
       gig: this.enrichGig(gig)
+    };
+  }
+
+  /**
+   * Post-Settlement Poster Rating (1 to 5 Stars) & Feedback (Max 50 Words)
+   * Updates student's average rating (`avg_rating`) and appends to `reviews_json`
+   */
+  async rateSettledGig(gigId, { actor_id, rating_score, rating_feedback }) {
+    if (actor_id) {
+      const rbac = this.verifyActorRole(actor_id, ['POSTER_BUSINESS', 'POSTER_INDIVIDUAL'], 'rate a settled job');
+      if (!rbac.ok) return rbac;
+    }
+    const gig = db.state.gigs.find((g) => g.gig_id === gigId);
+    if (!gig) {
+      return { ok: false, error: { code: 'ERR-MG-404', status: 404, title: 'Job Not Found', detail: 'Job not found.' } };
+    }
+    if (actor_id && gig.poster_id !== actor_id) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-FORBIDDEN',
+          status: 403,
+          title: 'Poster Ownership Guardrail',
+          detail: 'You can only rate and review jobs that you posted.'
+        }
+      };
+    }
+    if (!['SETTLED', 'AUTO_RELEASED'].includes(gig.state) && gig.lifecycle_status !== 'DELETED') {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-3001',
+          status: 409,
+          title: 'Job Not Settled Yet',
+          detail: 'You can only rate a job after payment has been settled.'
+        }
+      };
+    }
+
+    const score = Math.round(Number(rating_score));
+    if (!Number.isFinite(score) || score < 1 || score > 5) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-RATING-422',
+          status: 422,
+          title: 'Invalid Star Rating',
+          detail: 'Rating score must be between 1 and 5 stars.'
+        }
+      };
+    }
+
+    const cleanFeedback = stripHtmlAndNormalize(rating_feedback || 'Great work completed on schedule.');
+    const wordCount = cleanFeedback.trim().split(/\s+/).filter(Boolean).length;
+    if (wordCount > 50) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-RATING-WORDS',
+          status: 422,
+          title: 'Feedback Exceeds 50 Words',
+          detail: `Feedback must be at most 50 words (currently ${wordCount} words).`
+        }
+      };
+    }
+
+    const nowIso = new Date().toISOString();
+    gig.rating_score = score;
+    gig.rating_feedback = cleanFeedback;
+    gig.rated_at = nowIso;
+
+    const posterUser = db.state.users.find((u) => u.user_id === gig.poster_id);
+    const leadUser = db.state.users.find((u) => u.user_id === gig.assigned_lead_id);
+    if (leadUser) {
+      let reviews = [];
+      try { reviews = JSON.parse(leadUser.reviews_json || '[]'); } catch { reviews = []; }
+      // Replace existing review for same gig if re-rating, else unshift
+      reviews = reviews.filter((r) => r.gig_id !== gig.gig_id);
+      reviews.unshift({
+        gig_id: gig.gig_id,
+        gig_title: gig.title,
+        poster_name: posterUser ? posterUser.full_name : 'Verified Poster',
+        rating_score: score,
+        feedback_text: cleanFeedback,
+        rated_at: nowIso
+      });
+      leadUser.reviews_json = JSON.stringify(reviews);
+      const totalScore = reviews.reduce((sum, r) => sum + Number(r.rating_score || 5), 0);
+      leadUser.ratings_count = reviews.length;
+      leadUser.avg_rating = Number((totalScore / reviews.length).toFixed(2));
+    }
+
+    await db.commitMutation();
+    this.broadcastRealtimeEvent('GIG_RATED', {
+      gig_id: gig.gig_id,
+      student_id: leadUser ? leadUser.user_id : null,
+      rating_score: score
+    });
+
+    return {
+      ok: true,
+      gig: this.enrichGig(gig, 'SOVIMA_6MILE', actor_id || gig.poster_id),
+      student: leadUser ? this.sanitizeUserForView(leadUser, actor_id) : null
     };
   }
 
