@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: morunggig-skillbridge-nl
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run db:migrate
+    startCommand: npm start
+    healthCheckPath: /health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: MG_SALT_2026
+        generateValue: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WEBHOOK_HMAC_SECRET
+        generateValue: true

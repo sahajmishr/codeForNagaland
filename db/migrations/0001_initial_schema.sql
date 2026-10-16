@@ -1,0 +1,65 @@
+-- Migration 0001: Initial MorungGig (SkillBridge NL) Schema (SRS Section 4.1)
+-- Compatible with Neon Serverless PostgreSQL 16
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id             VARCHAR(32) PRIMARY KEY,
+    role                VARCHAR(24) NOT NULL CHECK (role IN ('STUDENT', 'POSTER_BUSINESS', 'POSTER_INDIVIDUAL', 'EDC_ARBITRATOR')),
+    full_name           VARCHAR(120) NOT NULL,
+    email               VARCHAR(160),
+    institution_or_org  VARCHAR(160) NOT NULL,
+    stream_or_sector    VARCHAR(80) NOT NULL,
+    corridor_cluster    VARCHAR(40) NOT NULL CHECK (corridor_cluster IN ('SOVIMA_6MILE', 'CHUMOUKEDIMA', 'DIMAPUR_TOWN', 'KOHIMA_TOWN', 'JOTSOMA_MERIEMA')),
+    kyc_id_hash         CHAR(64) NOT NULL UNIQUE,
+    upi_vpa             VARCHAR(100) NOT NULL,
+    masked_phone        VARCHAR(24) NOT NULL,
+    contact_phone       VARCHAR(24),
+    trust_score         NUMERIC(5,2) NOT NULL DEFAULT 95.00 CHECK (trust_score BETWEEN 0 AND 100),
+    completed_gigs_cnt  INTEGER NOT NULL DEFAULT 0 CHECK (completed_gigs_cnt >= 0),
+    wallet_balance_inr  NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (wallet_balance_inr >= 0),
+    exam_freeze_active  BOOLEAN NOT NULL DEFAULT FALSE,
+    nda_accepted        BOOLEAN NOT NULL DEFAULT TRUE,
+    free_slots_json     TEXT NOT NULL DEFAULT '[]',
+    skills_json         TEXT NOT NULL DEFAULT '[]',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS gigs (
+    gig_id              VARCHAR(32) PRIMARY KEY,
+    poster_id           VARCHAR(32) NOT NULL REFERENCES users(user_id),
+    title               VARCHAR(160) NOT NULL,
+    portfolio_title     VARCHAR(160) NOT NULL,
+    track_category      VARCHAR(32) NOT NULL CHECK (track_category IN ('COMMERCE_OPS', 'CONTENT_REELS', 'EVENTS_STALLS', 'LANGUAGE_TUTOR', 'DIGITAL_TECH')),
+    execution_mode      VARCHAR(16) NOT NULL CHECK (execution_mode IN ('DIGITAL', 'OFFLINE')),
+    corridor_cluster    VARCHAR(40) NOT NULL CHECK (corridor_cluster IN ('SOVIMA_6MILE', 'CHUMOUKEDIMA', 'DIMAPUR_TOWN', 'KOHIMA_TOWN', 'JOTSOMA_MERIEMA')),
+    venue_type          VARCHAR(24) NOT NULL CHECK (venue_type IN ('DIGITAL_REMOTE', 'PUBLIC_CAMPUS_HUB', 'COMMERCIAL_SHOP', 'VERIFIED_HOUSEHOLD')),
+    venue_label         VARCHAR(160) NOT NULL,
+    required_slot       VARCHAR(40) NOT NULL,
+    scheduled_end_hour  INTEGER NOT NULL DEFAULT 16 CHECK (scheduled_end_hour BETWEEN 8 AND 20),
+    is_sunday           BOOLEAN NOT NULL DEFAULT FALSE,
+    language_tag        VARCHAR(40) NOT NULL DEFAULT 'English / Nagamese',
+    payout_inr          NUMERIC(10,2) NOT NULL CHECK (payout_inr >= 300.00),
+    platform_fee_inr    NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (platform_fee_inr >= 0.00),
+    allow_morung_squad  BOOLEAN NOT NULL DEFAULT FALSE,
+    execution_type      VARCHAR(24) NOT NULL DEFAULT 'SOLO' CHECK (execution_type IN ('SOLO', 'MORUNG_SQUAD_70_30')),
+    assigned_lead_id    VARCHAR(32) REFERENCES users(user_id),
+    assigned_junior_id  VARCHAR(32) REFERENCES users(user_id),
+    criteria_1          VARCHAR(240) NOT NULL,
+    criteria_2          VARCHAR(240) NOT NULL,
+    criteria_3          VARCHAR(240) NOT NULL,
+    revisions_left      INTEGER NOT NULL DEFAULT 2 CHECK (revisions_left BETWEEN 0 AND 2),
+    revision_notes_json TEXT NOT NULL DEFAULT '[]',
+    start_pin           CHAR(4),
+    complete_pin        CHAR(4),
+    checkpoint_note     TEXT,
+    vault_payload_json  TEXT,
+    disputed_checkbox   INTEGER,
+    dispute_reason      TEXT,
+    safety_beacon_active BOOLEAN NOT NULL DEFAULT FALSE,
+    state               VARCHAR(32) NOT NULL CHECK (state IN (
+                            'DRAFT', 'ESCROW_LOCKED', 'ASSIGNED_DIGITAL', 'ASSIGNED_OFFLINE',
+                            'CHECKPOINT_VERIFIED', 'IN_PROGRESS_ONSITE', 'DELIVERED_VAULT',
+                            'DISPUTED_EDC', 'SETTLED', 'AUTO_RELEASED', 'REFUNDED'
+                        )),
+    auto_release_at     TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

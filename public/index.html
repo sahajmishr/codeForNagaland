@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MorungGig — Nagaland Campus Task & Escrow Platform</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <!-- ========================================================================
+       CLEAN MODERN NAVBAR WITH EXPLICIT ROLE PORTAL SWITCHER
+       ======================================================================== -->
+  <header class="navbar">
+    <div class="navbar-inner">
+      <div class="brand">
+        <div class="brand-logo">MG</div>
+        <span class="brand-name">MorungGig</span>
+      </div>
+
+      <!-- 1-Click Role Portal Switcher (Backed by Database Role Auth) -->
+      <div class="role-switcher-bar" role="tablist" aria-label="Switch Role Portal">
+        <button type="button" class="role-pill-btn active" id="portalBtnStudent" onclick="window.switchRolePortal('STUDENT')">
+          Student Portal
+        </button>
+        <button type="button" class="role-pill-btn" id="portalBtnPoster" onclick="window.switchRolePortal('POSTER')">
+          Poster / Client Portal
+        </button>
+        <button type="button" class="role-pill-btn" id="portalBtnEdc" onclick="window.switchRolePortal('EDC')">
+          EDC Arbitrator
+        </button>
+      </div>
+
+      <div class="navbar-right">
+        <span class="tag" id="activeUserTag">Toshi Ao (Student)</span>
+        <button type="button" class="btn btn-sm" id="openAuthModalBtn">Sign In</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================================
+       MAIN CONTAINER (RENDERS ONLY THE LOGGED-IN ROLE'S PORTAL)
+       ======================================================================== -->
+  <main class="container">
+
+    <!-- Role Header -->
+    <div class="portal-header">
+      <div>
+        <div class="portal-eyebrow" id="portalEyebrow">STUDENT WORKSPACE • CANNOT POST OR SETTLE JOBS</div>
+        <h1 class="portal-title" id="portalTitle">Find Verified Campus Jobs</h1>
+        <p class="portal-sub" id="portalSub">Browse escrow-backed tasks, accept work, and submit deliverables.</p>
+      </div>
+      <div id="portalQuickStat"></div>
+    </div>
+
+    <!-- Role-Isolated Sub-Navigation -->
+    <nav class="subnav" id="roleSubnav"></nav>
+
+    <!-- ======================================================================
+         1. STUDENT PORTAL VIEWS (ONLY VISIBLE TO STUDENTS)
+         ====================================================================== -->
+    <section id="sec-student-find" class="portal-section">
+      <div style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;">
+        <input type="search" id="studentSearchInput" class="input" style="max-width:300px;" placeholder="Search jobs..." />
+        <select id="studentCorridorSelect" class="select" style="width:auto;">
+          <option value="SOVIMA_6MILE" selected>My Campus: Sovima / 6th Mile</option>
+          <option value="CHUMOUKEDIMA">My Campus: Chümoukedima</option>
+          <option value="DIMAPUR_TOWN">My Campus: Dimapur Town</option>
+          <option value="KOHIMA_TOWN">My Campus: Kohima Town</option>
+          <option value="JOTSOMA_MERIEMA">My Campus: Jotsoma / Meriema</option>
+        </select>
+      </div>
+      <div id="studentFindGrid" class="cards-grid"></div>
+    </section>
+
+    <section id="sec-student-work" class="portal-section hidden">
+      <div id="studentWorkList"></div>
+    </section>
+
+    <section id="sec-student-wallet" class="portal-section hidden">
+      <div id="studentWalletList" class="cards-grid"></div>
+    </section>
+
+    <!-- ======================================================================
+         2. POSTER / CLIENT PORTAL VIEWS (ONLY VISIBLE TO POSTERS)
+         ====================================================================== -->
+    <section id="sec-poster-post" class="portal-section hidden">
+      <div class="card" style="max-width: 680px;">
+        <div style="margin-bottom:14px;">
+          <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+            Quick Fill Template (Optional)
+          </div>
+          <div id="posterPresetRow" class="preset-row"></div>
+        </div>
+
+        <form id="simplePostJobForm" class="form-stack">
+          <div class="field">
+            <label for="postTitle">Job Title</label>
+            <input type="text" id="postTitle" class="input" required value="3 Instagram Reels for Sovima Cafe" placeholder="e.g. 3 Instagram Reels for Local Brand" />
+          </div>
+
+          <div class="form-grid-3">
+            <div class="field">
+              <label for="postCategory">Category</label>
+              <select id="postCategory" class="select">
+                <option value="CONTENT_REELS" selected>Content & Reels (Min ₹500)</option>
+                <option value="COMMERCE_OPS">Commerce & GST (Min ₹400)</option>
+                <option value="EVENTS_STALLS">Events & Stalls (Min ₹500)</option>
+                <option value="LANGUAGE_TUTOR">Language & Tutoring (Min ₹300)</option>
+                <option value="DIGITAL_TECH">Web & Tech (Min ₹500)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="postCorridor">Location Corridor</label>
+              <select id="postCorridor" class="select">
+                <option value="SOVIMA_6MILE" selected>Sovima / 6th Mile</option>
+                <option value="CHUMOUKEDIMA">Chümoukedima</option>
+                <option value="DIMAPUR_TOWN">Dimapur Town</option>
+                <option value="KOHIMA_TOWN">Kohima Town</option>
+                <option value="JOTSOMA_MERIEMA">Jotsoma / Meriema</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="postPayout">Payout (₹ INR)</label>
+              <input type="number" id="postPayout" class="input mono" min="300" step="50" required value="900" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label>3 Clear Deliverable Checkboxes (Scope Lock)</label>
+            <input type="text" id="postCrit1" class="input" required value="Shoot & edit 3 vertical 1080p reels (30-45 sec each)" placeholder="Deliverable 1" style="margin-bottom:8px;" />
+            <input type="text" id="postCrit2" class="input" required value="Include clear English/Nagamese captions and brand logo" placeholder="Deliverable 2" style="margin-bottom:8px;" />
+            <input type="text" id="postCrit3" class="input" required value="Upload final MP4 files to the MorungGig Delivery Vault" placeholder="Deliverable 3" />
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; padding-top:6px;">
+            <label style="display:flex; align-items:center; gap:7px; font-size:13px; color:var(--text-secondary); cursor:pointer;">
+              <input type="checkbox" id="postAllowSquad" checked />
+              Allow 2-Student Squad (70% Lead / 30% Junior)
+            </label>
+            <span class="tag tag-sage" id="postFeeBadge">Escrow Fee: ₹45 (5%)</span>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full" id="postSubmitBtn">
+            Post Job & Lock ₹945 UPI Escrow
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <section id="sec-poster-jobs" class="portal-section hidden">
+      <div id="posterJobsList"></div>
+    </section>
+
+    <section id="sec-poster-settle" class="portal-section hidden">
+      <div id="posterSettleList"></div>
+    </section>
+
+    <!-- ======================================================================
+         3. ARBITRATOR PORTAL VIEWS (ONLY VISIBLE TO EDC ARBITRATOR)
+         ====================================================================== -->
+    <section id="sec-edc-disputes" class="portal-section hidden">
+      <div id="edcDisputesList"></div>
+    </section>
+
+    <section id="sec-edc-ledger" class="portal-section hidden">
+      <div id="edcLedgerList"></div>
+    </section>
+
+  </main>
+
+  <!-- ========================================================================
+       SIMPLE SIGN IN / ACCOUNT SWITCH MODAL
+       ======================================================================== -->
+  <div id="authModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="font-size:16px; font-weight:650;">Sign In or Switch Account</h3>
+        <button type="button" class="btn btn-sm" id="closeAuthModalBtn">✕</button>
+      </div>
+
+      <div class="form-stack">
+        <div class="field">
+          <label>Select Database Account (Enforces Role Permissions)</label>
+          <select id="accountSelectDropdown" class="select">
+            <optgroup label="Students (Can Only Browse, Accept & Submit Work)">
+              <option value="USR-STU-01" selected>Toshi Ao — Student (ICFAI Sovima)</option>
+              <option value="USR-STU-02">Imna Jamir — Student (Tetso College)</option>
+            </optgroup>
+            <optgroup label="Posters / Clients (Can Only Post, Hire & Settle Jobs)">
+              <option value="USR-POS-01">Abeni Lotha — Poster (Yes Coffee Dimapur)</option>
+              <option value="USR-POS-02">Mrs. Kevino Angami — Household Poster</option>
+            </optgroup>
+            <optgroup label="Arbitrator (Can Only Resolve Disputes)">
+              <option value="USR-EDC-01">Kezia Angami — YouthNet EDC Arbitrator</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <button type="button" class="btn btn-primary btn-full" id="confirmSwitchAccountBtn">
+          Switch to Selected Account
+        </button>
+
+        <div style="border-top:1px solid var(--border); padding-top:14px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:12.5px; color:var(--text-secondary);">Or continue with Google OAuth 2.0</span>
+          <button type="button" class="btn btn-sm" id="googleSignInBtn">Google Sign-In</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toastContainer" class="toast hidden" role="status" aria-live="polite">
+    <div style="font-weight:650; margin-bottom:2px;" id="toastCode"></div>
+    <div id="toastMessage"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
