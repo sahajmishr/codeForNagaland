@@ -269,11 +269,11 @@
       "criteria_2": "Flag stock items below 15-day buffer threshold and compute unit cost variance",
       "criteria_3": "Upload verified .xlsx sheet to Watermarked Vault (rows > 5 blurred until escrow release)",
       "allow_morung_squad": true,
-      "state": "ESCROW_LOCKED",
-      "execution_type": "MORUNG_SQUAD_70_30",
-      "assigned_lead_id": null,
+      "state": "ASSIGNED_DIGITAL",
+      "execution_type": "SOLO",
+      "assigned_lead_id": "USR-STU-01",
       "assigned_junior_id": null,
-      "standby_buddy_id": null,
+      "standby_buddy_id": "USR-STU-03",
       "checkpoint_note": null,
       "checkpoint_at": null,
       "revisions_left": 2,
@@ -530,8 +530,8 @@
       "utr_reference": "UPI-628819042102",
       "locked_payout_inr": 700,
       "platform_fee_inr": 35,
-      "lead_payout_inr": 490,
-      "junior_payout_inr": 210,
+      "lead_payout_inr": 700,
+      "junior_payout_inr": 0,
       "poster_refund_inr": 0,
       "status": "LOCKED",
       "webhook_event_id": "evt_seed_102",
@@ -669,111 +669,27 @@
   ],
   "audit_logs": [
     {
-      "log_id": 5,
-      "gig_id": "GIG-NL-2026-101",
-      "actor_id": "USR-STU-01",
-      "from_state": "CHECKPOINT_VERIFIED",
-      "to_state": "DELIVERED_VAULT",
-      "action_summary": "Uploaded \"GIG-NL-2026-101_Final_Submission.mp4\" to Anti-Theft Watermarked Vault; 36h Smart Auto-Release Timer armed",
-      "utr_or_hash": "e9e3216037849242c920b30b477c8ff80ca67a13e98f7ccc9c244db53963b59f",
-      "logged_at": "2026-10-16T03:13:58.812Z"
-    },
-    {
-      "log_id": 4,
-      "gig_id": "GIG-NL-2026-101",
-      "actor_id": "USR-STU-01",
-      "from_state": "ASSIGNED_DIGITAL",
-      "to_state": "CHECKPOINT_VERIFIED",
-      "action_summary": "20% Early Checkpoint verified: \"20% Checkpoint verified\"",
-      "utr_or_hash": "f6a8d5e9cf354168",
-      "logged_at": "2026-10-16T03:13:54.461Z"
-    },
-    {
-      "log_id": 3,
-      "gig_id": "GIG-NL-2026-103",
-      "actor_id": "USR-STU-01",
-      "from_state": "ASSIGNED_OFFLINE",
-      "to_state": "IN_PROGRESS_ONSITE",
-      "action_summary": "Verified 4-digit START_PIN (4707); Student On-Site Arrival logged & Campus Safety Beacon activated",
-      "utr_or_hash": "START-PIN-4707",
-      "logged_at": "2026-10-16T03:13:44.374Z"
-    },
-    {
-      "log_id": 2,
-      "gig_id": "GIG-NL-2026-103",
-      "actor_id": "USR-STU-01",
-      "from_state": "ESCROW_LOCKED",
-      "to_state": "ASSIGNED_OFFLINE",
-      "action_summary": "Assigned Solo Specialist (USR-STU-01 = ₹500); Standby Buddy: USR-STU-03",
-      "utr_or_hash": "UPI-628819042103",
-      "logged_at": "2026-10-16T03:13:24.372Z"
-    },
-    {
       "log_id": 1,
-      "gig_id": "GIG-NL-2026-101",
+      "gig_id": "GIG-NL-2026-102",
       "actor_id": "USR-STU-01",
       "from_state": "ESCROW_LOCKED",
       "to_state": "ASSIGNED_DIGITAL",
-      "action_summary": "Assigned Solo Specialist (USR-STU-01 = ₹900); Standby Buddy: USR-STU-03",
-      "utr_or_hash": "UPI-628819042101",
-      "logged_at": "2026-10-16T03:11:19.519Z"
+      "action_summary": "Assigned Solo Specialist (USR-STU-01 = ₹700); Standby Buddy: USR-STU-03",
+      "utr_or_hash": "UPI-628819042102",
+      "logged_at": "2026-10-16T03:34:41.281Z"
     }
   ],
   "notifications_outbox": [
     {
-      "notification_id": "NOTIF-1792120438812-499",
+      "notification_id": "NOTIF-1792121681282-514",
       "recipient_id": "USR-POS-01",
-      "gig_id": "GIG-NL-2026-101",
+      "gig_id": "GIG-NL-2026-102",
       "channel": "WHATSAPP_INAPP",
-      "title": "Deliverable in Watermarked Vault (GIG-NL-2026-101)",
-      "message": "[MorungGig Escrow Alert] Student uploaded \"GIG-NL-2026-101_Final_Submission.mp4\" to the Watermarked Vault. Inspect & approve within 36h before auto-release.",
-      "whatsapp_uri": "https://wa.me/919436011020?text=%5BMorungGig%20Escrow%20Alert%5D%20Student%20uploaded%20%22GIG-NL-2026-101_Final_Submission.mp4%22%20to%20the%20Watermarked%20Vault.%20Inspect%20%26%20approve%20within%2036h%20before%20auto-release.",
+      "title": "Contract Assigned: Monthly Roastery Bean & Packaging Stock Excel Reconciliation",
+      "message": "[MorungGig] Solo Specialist assigned to GIG-NL-2026-102. 20% Checkpoint timer started.",
+      "whatsapp_uri": "https://wa.me/919436011020?text=%5BMorungGig%5D%20Solo%20Specialist%20assigned%20to%20GIG-NL-2026-102.%2020%25%20Checkpoint%20timer%20started.",
       "is_read": false,
-      "created_at": "2026-10-16T03:13:58.812Z"
-    },
-    {
-      "notification_id": "NOTIF-1792120434461-136",
-      "recipient_id": "USR-POS-01",
-      "gig_id": "GIG-NL-2026-101",
-      "channel": "WHATSAPP_INAPP",
-      "title": "20% Early Checkpoint Verified (GIG-NL-2026-101)",
-      "message": "[MorungGig Progress] Student verified the 20% early checkpoint on \"Shoot & Edit 3 Vertical Cafe Reels (Cold Brew & Study Lounge)\": 20% Checkpoint verified",
-      "whatsapp_uri": "https://wa.me/919436011020?text=%5BMorungGig%20Progress%5D%20Student%20verified%20the%2020%25%20early%20checkpoint%20on%20%22Shoot%20%26%20Edit%203%20Vertical%20Cafe%20Reels%20(Cold%20Brew%20%26%20Study%20Lounge)%22%3A%2020%25%20Checkpoint%20verified",
-      "is_read": false,
-      "created_at": "2026-10-16T03:13:54.461Z"
-    },
-    {
-      "notification_id": "NOTIF-1792120424374-581",
-      "recipient_id": "USR-POS-02",
-      "gig_id": "GIG-NL-2026-103",
-      "channel": "WHATSAPP_INAPP",
-      "title": "START_PIN Verified — Student On-Site (GIG-NL-2026-103)",
-      "message": "[MorungGig On-Site] Arrival verified via START_PIN (4707). Live Campus Safety Beacon is active.",
-      "whatsapp_uri": "https://wa.me/919862997740?text=%5BMorungGig%20On-Site%5D%20Arrival%20verified%20via%20START_PIN%20(4707).%20Live%20Campus%20Safety%20Beacon%20is%20active.",
-      "is_read": false,
-      "created_at": "2026-10-16T03:13:44.374Z"
-    },
-    {
-      "notification_id": "NOTIF-1792120404372-503",
-      "recipient_id": "USR-POS-02",
-      "gig_id": "GIG-NL-2026-103",
-      "channel": "WHATSAPP_INAPP",
-      "title": "Contract Assigned: NBSE Class 10 Mathematics & Science Revision Mentorship",
-      "message": "[MorungGig] Solo Specialist assigned to GIG-NL-2026-103. Share START_PIN (4707) upon arrival.",
-      "whatsapp_uri": "https://wa.me/919862997740?text=%5BMorungGig%5D%20Solo%20Specialist%20assigned%20to%20GIG-NL-2026-103.%20Share%20START_PIN%20(4707)%20upon%20arrival.",
-      "is_read": false,
-      "created_at": "2026-10-16T03:13:24.372Z"
-    },
-    {
-      "notification_id": "NOTIF-1792120279519-805",
-      "recipient_id": "USR-POS-01",
-      "gig_id": "GIG-NL-2026-101",
-      "channel": "WHATSAPP_INAPP",
-      "title": "Contract Assigned: Shoot & Edit 3 Vertical Cafe Reels (Cold Brew & Study Lounge)",
-      "message": "[MorungGig] Solo Specialist assigned to GIG-NL-2026-101. 20% Checkpoint timer started.",
-      "whatsapp_uri": "https://wa.me/919436011020?text=%5BMorungGig%5D%20Solo%20Specialist%20assigned%20to%20GIG-NL-2026-101.%2020%25%20Checkpoint%20timer%20started.",
-      "is_read": false,
-      "created_at": "2026-10-16T03:11:19.520Z"
+      "created_at": "2026-10-16T03:34:41.282Z"
     }
   ],
   "processed_webhooks": [

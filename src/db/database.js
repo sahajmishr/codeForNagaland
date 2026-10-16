@@ -63,7 +63,7 @@ class MorungDatabase {
       const envPath = path.join(__dirname, '../../.env');
       const envLines = [
         `PORT=${process.env.PORT || 3000}`,
-        `HOST=${process.env.HOST || '0.0.0.0'}`,
+        `HOST=${process.env.HOST || '127.0.0.1'}`,
         `NODE_ENV=${process.env.NODE_ENV || 'development'}`,
         `LOG_LEVEL=${process.env.LOG_LEVEL || 'info'}`,
         `DATABASE_URL=${this.runtimeConfig.databaseUrl || ''}`,
