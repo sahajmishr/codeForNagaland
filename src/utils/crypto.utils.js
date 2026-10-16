@@ -27,6 +27,19 @@ function computeSha256(input) {
 }
 
 /**
+ * Salted Password Hash & Verification for Persistent User Accounts
+ */
+function hashPassword(rawPassword) {
+  return computeSha256(`MG_PWD_SALT_2026:${String(rawPassword || '')}`);
+}
+
+function verifyPassword(rawPassword, storedHash) {
+  if (!storedHash) return false;
+  const computed = hashPassword(rawPassword);
+  return computed === storedHash;
+}
+
+/**
  * FR-IAM-02: Masked Contact Relay prior to Active Contract
  * Masks middle digits -> +91-8794-XX-4912
  */
@@ -188,6 +201,8 @@ function generateQrSvg(dataString, size = 120) {
 module.exports = {
   computeStudentKycHash,
   computeSha256,
+  hashPassword,
+  verifyPassword,
   maskPhone,
   generatePin4,
   generateDualPins,

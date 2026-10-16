@@ -3,7 +3,7 @@
  * Implements realistic Nagaland Campus, MSME, Household & YouthNet EDC records
  */
 
-const { computeStudentKycHash, computeSha256 } = require('../utils/crypto.utils');
+const { computeStudentKycHash, computeSha256, hashPassword } = require('../utils/crypto.utils');
 
 function buildInitialSeedState() {
   const now = new Date();
@@ -758,6 +758,55 @@ function buildInitialSeedState() {
       created_at: twoHoursAgo
     }
   ];
+
+  const defaultPwdHash = hashPassword('password123');
+  const activeStudentIds = new Set();
+  gigs.forEach((g) => {
+    if (!['ESCROW_LOCKED', 'SETTLED', 'AUTO_RELEASED', 'REFUNDED'].includes(g.state)) {
+      if (g.assigned_lead_id) activeStudentIds.add(g.assigned_lead_id);
+      if (g.assigned_junior_id) activeStudentIds.add(g.assigned_junior_id);
+    }
+    if (!g.description) {
+      g.description = `${g.title}. Location: ${g.venue_label} (${g.corridor_cluster}). Turnaround: ${g.duration_label}. All 3 acceptance deliverables must be completed to release the locked ₹${g.payout_inr} escrow.`;
+    }
+    if (g.state === 'ESCROW_LOCKED') {
+      g.lifecycle_status = 'ACTIVE';
+      g.applicants_json = JSON.stringify([
+        {
+          student_id: 'USR-STU-03',
+          full_name: 'Sentila Jamir',
+          institution: 'Tetso College, Sovima / 6th Mile',
+          pitch_note: 'Available during free afternoon slot; completed 4 similar campus projects.',
+          applied_at: twoHoursAgo
+        }
+      ]);
+    } else if (['SETTLED', 'AUTO_RELEASED', 'REFUNDED'].includes(g.state)) {
+      g.lifecycle_status = 'DELETED';
+      g.applicants_json = '[]';
+    } else {
+      g.lifecycle_status = 'ASSIGNED';
+      g.applicants_json = '[]';
+    }
+  });
+
+  users.forEach((u) => {
+    u.password_hash = u.password_hash || defaultPwdHash;
+    u.bio = u.bio || `${u.stream_or_sector} at ${u.institution_or_org}`;
+    if (u.role === 'STUDENT') {
+      u.availability_status = activeStudentIds.has(u.user_id) ? 'WORKING' : 'FREE';
+    } else {
+      u.availability_status = 'FREE';
+    }
+    u.wallet_transactions_json = u.wallet_transactions_json || JSON.stringify([
+      {
+        tx_id: `TX-INIT-${u.user_id}`,
+        type: 'CREDIT_ESCROW',
+        amount_inr: Number(u.wallet_balance_inr),
+        note: 'Verified historical account balance',
+        created_at: yesterday
+      }
+    ]);
+  });
 
   return {
     users,

@@ -166,11 +166,12 @@ test('TC-07, TC-12, TC-18, TC-19: Guardrail Enforcement (Scam Regex, Fair-Rate F
 });
 
 test('TC-14, TC-15, TC-16, TC-20: Digital Vault Lifecycle, ABAC Gate, Max 2 Revisions & 70/30 Split Settlement', async () => {
-  // 1. Assign GIG-NL-2026-101 as Morung Squad (70/30)
+  // 1. Assign GIG-NL-2026-101 as Morung Squad (70/30) by its Poster (USR-POS-01)
   const assignRes = await fastify.inject({
     method: 'POST',
     url: '/api/v1/gigs/GIG-NL-2026-101/assign',
     payload: {
+      actor_id: 'USR-POS-01',
       lead_student_id: 'USR-STU-01',
       junior_student_id: 'USR-STU-02',
       execution_type: 'MORUNG_SQUAD_70_30'
@@ -410,4 +411,162 @@ test('TC-31: Strict Database Role-Based Access Control (RBAC) Enforcement (Stude
   assert.equal(stuArbRes.statusCode, 403);
   assert.equal(stuArbRes.json().error.code, 'ERR-MG-RBAC-403');
 });
+
+test('TC-32: Auth (Sign Up / Login / Cookies), Availability (FREE/WORKING/OFFLINE), Apply -> Assign -> DELETED Lifecycle, Mock Withdrawal & Ownership Guardrails', async () => {
+  // 1. Sign Up a brand new Student account and verify session cookie is set
+  const signupRes = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/auth/signup',
+    payload: {
+      role: 'STUDENT',
+      full_name: 'Merenla Jamir',
+      email: 'merenla@tetsocollege.org',
+      password: 'securePassword123',
+      institution_or_org: 'Tetso College, Sovima',
+      college_code: 'TETSO',
+      roll_number: 'BCOM-2026-881',
+      corridor_cluster: 'SOVIMA_6MILE',
+      phone: '9862778899',
+      upi_vpa: 'merenla@okaxis',
+      bio: 'B.Com Student'
+    }
+  });
+  assert.equal(signupRes.statusCode, 201);
+  const newStudent = signupRes.json().data.user;
+  assert.equal(newStudent.availability_status, 'FREE');
+  assert.ok(signupRes.headers['set-cookie']);
+
+  // 2. Log In with Email + Password
+  const loginRes = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: {
+      email: 'merenla@tetsocollege.org',
+      password: 'securePassword123'
+    }
+  });
+  assert.equal(loginRes.statusCode, 200);
+  assert.equal(loginRes.json().data.user.user_id, newStudent.user_id);
+
+  // 3. Toggle availability FREE -> OFFLINE -> FREE while not working
+  const offRes = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/users/${newStudent.user_id}/availability`,
+    payload: { actor_id: newStudent.user_id, availability_status: 'OFFLINE' }
+  });
+  assert.equal(offRes.statusCode, 200);
+  assert.equal(offRes.json().data.availability_status, 'OFFLINE');
+
+  const freeRes = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/users/${newStudent.user_id}/availability`,
+    payload: { actor_id: newStudent.user_id, availability_status: 'FREE' }
+  });
+  assert.equal(freeRes.statusCode, 200);
+  assert.equal(freeRes.json().data.availability_status, 'FREE');
+
+  // 4. Student applies to ACTIVE job GIG-NL-2026-101
+  const applyRes = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/gigs/GIG-NL-2026-101/apply',
+    payload: {
+      actor_id: newStudent.user_id,
+      pitch_note: 'I have read the job description and can shoot all 3 reels.'
+    }
+  });
+  assert.equal(applyRes.statusCode, 200);
+  assert.equal(applyRes.json().data.lifecycle_status, 'ACTIVE');
+  assert.ok(applyRes.json().data.applicants.some((a) => a.student_id === newStudent.user_id));
+
+  // 5. Ownership Guardrail: Another Poster (USR-POS-02) CANNOT assign USR-POS-01's job!
+  const wrongPosterAssign = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/gigs/GIG-NL-2026-101/assign',
+    payload: {
+      actor_id: 'USR-POS-02',
+      lead_student_id: newStudent.user_id,
+      execution_type: 'SOLO'
+    }
+  });
+  assert.equal(wrongPosterAssign.statusCode, 403);
+  assert.equal(wrongPosterAssign.json().error.code, 'ERR-MG-FORBIDDEN');
+
+  // 6. Job Owner Poster (USR-POS-01) assigns the job to Merenla -> Job becomes ASSIGNED, Merenla becomes WORKING
+  const assignOk = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/gigs/GIG-NL-2026-101/assign',
+    payload: {
+      actor_id: 'USR-POS-01',
+      lead_student_id: newStudent.user_id,
+      execution_type: 'SOLO'
+    }
+  });
+  assert.equal(assignOk.statusCode, 200);
+  assert.equal(assignOk.json().data.lifecycle_status, 'ASSIGNED');
+  assert.equal(assignOk.json().data.lead_student.availability_status, 'WORKING');
+
+  // 7. System-Maintained WORKING Lock: Merenla CANNOT manually toggle status to FREE or OFFLINE while WORKING!
+  const lockedToggle = await fastify.inject({
+    method: 'POST',
+    url: `/api/v1/users/${newStudent.user_id}/availability`,
+    payload: { actor_id: newStudent.user_id, availability_status: 'OFFLINE' }
+  });
+  assert.equal(lockedToggle.statusCode, 409);
+  assert.equal(lockedToggle.json().error.code, 'ERR-MG-WORKING-LOCKED');
+
+  // 8. Ownership Guardrail: Unassigned student (USR-STU-02) CANNOT submit work on Merenla's assigned job
+  const wrongStudentDeliver = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/vault/GIG-NL-2026-101/deliver',
+    payload: {
+      actor_id: 'USR-STU-02',
+      deliverable_title: 'Hijack.mp4',
+      criteria_checked: [true, true, true]
+    }
+  });
+  assert.equal(wrongStudentDeliver.statusCode, 403);
+  assert.equal(wrongStudentDeliver.json().error.code, 'ERR-MG-FORBIDDEN');
+
+  // 9. Merenla submits partial checkpoint & final deliverable
+  await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/gigs/GIG-NL-2026-101/checkpoint',
+    payload: { actor_id: newStudent.user_id, note: '50% reels edited' }
+  });
+  await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/vault/GIG-NL-2026-101/deliver',
+    payload: {
+      actor_id: newStudent.user_id,
+      deliverable_title: 'Merenla_Final_Reels.mp4',
+      criteria_checked: [true, true, true]
+    }
+  });
+
+  // 10. Poster (USR-POS-01) settles payment -> Job becomes DELETED, ₹900 credited to Merenla, Merenla becomes FREE
+  const settleOk = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/escrow/GIG-NL-2026-101/settle',
+    payload: { actor_id: 'USR-POS-01', trigger_type: 'POSTER_APPROVAL' }
+  });
+  assert.equal(settleOk.statusCode, 200);
+  assert.equal(settleOk.json().data.lifecycle_status, 'DELETED');
+  assert.equal(settleOk.json().data.lead_student.wallet_balance_inr, 900);
+  assert.equal(settleOk.json().data.lead_student.availability_status, 'FREE');
+
+  // 11. Mock Withdrawal: Merenla withdraws ₹400 -> Balance becomes ₹500
+  const withdrawRes = await fastify.inject({
+    method: 'POST',
+    url: '/api/v1/wallet/withdraw',
+    payload: {
+      actor_id: newStudent.user_id,
+      amount_inr: 400,
+      upi_vpa: 'merenla@okaxis'
+    }
+  });
+  assert.equal(withdrawRes.statusCode, 200);
+  assert.equal(withdrawRes.json().data.user.wallet_balance_inr, 500);
+  assert.equal(withdrawRes.json().data.withdrawal.amount_inr, -400);
+});
+
 

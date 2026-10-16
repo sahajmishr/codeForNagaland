@@ -213,8 +213,102 @@ function buildServer(options = {}) {
   });
 
   // ==========================================================================
-  // 4. IAM, GOOGLE OAUTH 2.0, OTP & ROLE SWITCHER (FR-IAM & SDD Section 3.2)
+  // 4. IAM, PERSISTENT LOGIN/SIGNUP, SESSIONS, COOKIES & GOOGLE OAUTH
   // ==========================================================================
+  fastify.get('/api/v1/auth/me', async (req) => {
+    const actorId = (req.user && req.user.sub) || req.headers['x-morung-actor-id'] || null;
+    if (!actorId) {
+      return {
+        success: true,
+        data: { authenticated: false, user: null },
+        meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+      };
+    }
+    const found = db.state.users.find((u) => u.user_id === actorId);
+    if (!found) {
+      return {
+        success: true,
+        data: { authenticated: false, user: null },
+        meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+      };
+    }
+    return {
+      success: true,
+      data: {
+        authenticated: true,
+        user: engine.sanitizeUserForView(found, found.user_id)
+      },
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  });
+
+  fastify.post('/api/v1/auth/signup', async (req, reply) => {
+    const res = await engine.onboardUser(req.body || {});
+    if (!res.ok) return sendError(reply, res.error, req.requestId);
+
+    const accessToken = signJwt({
+      sub: res.user.user_id,
+      role: res.user.role,
+      corridor: res.user.corridor_cluster,
+      kyc_tier: 'SHA256_KYC_VERIFIED'
+    }, 604800);
+
+    reply.setCookie('mg_access_token', accessToken, {
+      path: '/',
+      httpOnly: false,
+      sameSite: 'lax',
+      maxAge: 604800
+    });
+
+    return reply.code(201).send({
+      success: true,
+      data: {
+        access_token: accessToken,
+        user: res.user,
+        zero_raw_pii_proof: res.zero_raw_pii_proof
+      },
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    });
+  });
+
+  fastify.post('/api/v1/auth/login', async (req, reply) => {
+    const { email, password } = req.body || {};
+    const res = engine.loginWithPassword(email, password);
+    if (!res.ok) return sendError(reply, res.error, req.requestId);
+
+    const accessToken = signJwt({
+      sub: res.user.user_id,
+      role: res.user.role,
+      corridor: res.user.corridor_cluster,
+      kyc_tier: 'PASSWORD_SESSION_VERIFIED'
+    }, 604800);
+
+    reply.setCookie('mg_access_token', accessToken, {
+      path: '/',
+      httpOnly: false,
+      sameSite: 'lax',
+      maxAge: 604800
+    });
+
+    return {
+      success: true,
+      data: {
+        access_token: accessToken,
+        user: res.user
+      },
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  });
+
+  fastify.post('/api/v1/auth/logout', async (req, reply) => {
+    reply.clearCookie('mg_access_token', { path: '/' });
+    return {
+      success: true,
+      data: { logged_out: true },
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  });
+
   fastify.post('/api/v1/auth/switch-role', async (req, reply) => {
     const { user_id } = req.body || {};
     const targetUser = db.state.users.find((u) => u.user_id === user_id) || db.state.users[0];
@@ -223,16 +317,16 @@ function buildServer(options = {}) {
       role: targetUser.role,
       corridor: targetUser.corridor_cluster,
       kyc_tier: 'INSTITUTION_VERIFIED'
-    }, 900);
+    }, 604800);
 
-    reply.setCookie('mg_access_token', accessToken, { path: '/', httpOnly: false, maxAge: 900 });
+    reply.setCookie('mg_access_token', accessToken, { path: '/', httpOnly: false, sameSite: 'lax', maxAge: 604800 });
 
     return {
       success: true,
       data: {
         access_token: accessToken,
         token_type: 'Bearer',
-        expires_in: 900,
+        expires_in: 604800,
         user: engine.sanitizeUserForView(targetUser, targetUser.user_id)
       },
       meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
@@ -450,6 +544,58 @@ function buildServer(options = {}) {
     };
   });
 
+  // Update Own Profile (Strict Ownership Guardrail)
+  const handleProfileUpdate = async (req, reply) => {
+    const body = req.body || {};
+    const actorId = (req.user && req.user.sub) || req.headers['x-morung-actor-id'] || body.actor_id;
+    const targetUserId = (req.params && req.params.userId) || actorId;
+    const res = await engine.updateOwnProfile(actorId, targetUserId, body);
+    if (!res.ok) return sendError(reply, res.error, req.requestId);
+    return {
+      success: true,
+      data: res.user,
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  };
+  fastify.put('/api/v1/users/me/profile', handleProfileUpdate);
+  fastify.post('/api/v1/users/:userId/profile', handleProfileUpdate);
+
+  // Toggle Student Availability (`FREE` <-> `OFFLINE`; `WORKING` is system-locked)
+  const handleAvailabilityToggle = async (req, reply) => {
+    const body = req.body || {};
+    const actorId = (req.user && req.user.sub) || req.headers['x-morung-actor-id'] || body.actor_id || (req.params && req.params.userId);
+    if (req.params && req.params.userId && actorId !== req.params.userId) {
+      return sendError(reply, {
+        code: 'ERR-MG-FORBIDDEN',
+        status: 403,
+        title: 'Privacy & Ownership Guardrail',
+        detail: 'You can only toggle your own availability status.'
+      }, req.requestId);
+    }
+    const res = await engine.setStudentAvailability(actorId, body.availability_status);
+    if (!res.ok) return sendError(reply, res.error, req.requestId);
+    return {
+      success: true,
+      data: res.user,
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  };
+  fastify.post('/api/v1/users/me/availability', handleAvailabilityToggle);
+  fastify.post('/api/v1/users/:userId/availability', handleAvailabilityToggle);
+
+  // Mock Wallet Withdrawal
+  fastify.post('/api/v1/wallet/withdraw', async (req, reply) => {
+    const body = req.body || {};
+    const actorId = (req.user && req.user.sub) || req.headers['x-morung-actor-id'] || body.actor_id;
+    const res = await engine.withdrawWalletBalance(actorId, body.amount_inr, body.upi_vpa);
+    if (!res.ok) return sendError(reply, res.error, req.requestId);
+    return {
+      success: true,
+      data: res,
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  });
+
   // ==========================================================================
   // 5. GIG CREATION, NAGAMESE VOICE PARSER & FTS SEARCH (SRS Endpoints 1 & 2)
   // ==========================================================================
@@ -490,10 +636,37 @@ function buildServer(options = {}) {
   fastify.post('/api/v1/gigs', handleCreateGig);
 
   // ==========================================================================
-  // 6. MATCHING, MORUNG SQUAD (70/30), CHECKPOINT & STANDBY BUDDY HANDOVER
+  // 6. APPLICATION, POSTER ASSIGNMENT, QUIT, CHECKPOINT & HANDOVER
   // ==========================================================================
+  fastify.post('/api/v1/gigs/:gigId/apply', async (req, reply) => {
+    const body = req.body || {};
+    const actor_id = body.actor_id || (req.user && req.user.sub) || req.headers['x-morung-actor-id'];
+    const res = await engine.applyToGig(req.params.gigId, { ...body, actor_id });
+    if (!res.ok) return sendError(reply, res.error, req.requestId);
+    return {
+      success: true,
+      data: res.gig,
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  });
+
+  fastify.post('/api/v1/gigs/:gigId/quit', async (req, reply) => {
+    const body = req.body || {};
+    const actor_id = body.actor_id || (req.user && req.user.sub) || req.headers['x-morung-actor-id'];
+    const res = await engine.quitAssignedGig(req.params.gigId, { ...body, actor_id });
+    if (!res.ok) return sendError(reply, res.error, req.requestId);
+    return {
+      success: true,
+      data: res.gig,
+      user: res.user,
+      meta: { request_id: req.requestId, timestamp: new Date().toISOString() }
+    };
+  });
+
   fastify.post('/api/v1/gigs/:gigId/assign', async (req, reply) => {
-    const res = await engine.assignOrClaimGig(req.params.gigId, req.body || {});
+    const body = req.body || {};
+    const actor_id = body.actor_id || (req.user && req.user.sub) || req.headers['x-morung-actor-id'];
+    const res = await engine.assignOrClaimGig(req.params.gigId, { ...body, actor_id });
     if (!res.ok) return sendError(reply, res.error, req.requestId);
     return {
       success: true,

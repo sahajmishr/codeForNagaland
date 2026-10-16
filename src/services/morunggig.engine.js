@@ -9,6 +9,8 @@ const { NAGALAND_CONFIG } = require('../config/nagaland.constants');
 const {
   computeStudentKycHash,
   computeSha256,
+  hashPassword,
+  verifyPassword,
   maskPhone,
   generatePin4,
   generateDualPins,
@@ -130,8 +132,13 @@ class MorungGigEngine {
 
     let freeSlots = [];
     let skills = [];
+    let walletTransactions = [];
     try { freeSlots = JSON.parse(user.free_slots_json || '[]'); } catch { freeSlots = []; }
     try { skills = JSON.parse(user.skills_json || '[]'); } catch { skills = []; }
+    try { walletTransactions = JSON.parse(user.wallet_transactions_json || '[]'); } catch { walletTransactions = []; }
+
+    const computedAvailability = this.getSystemComputedAvailability(user);
+    const isSelf = viewerUserId && viewerUserId === user.user_id;
 
     return {
       user_id: user.user_id,
@@ -151,9 +158,53 @@ class MorungGigEngine {
       wallet_balance_inr: Number(user.wallet_balance_inr),
       exam_freeze_active: Boolean(user.exam_freeze_active),
       nda_accepted: Boolean(user.nda_accepted),
+      availability_status: computedAvailability,
+      bio: user.bio || `${user.stream_or_sector} • ${user.institution_or_org}`,
+      wallet_transactions: isSelf ? walletTransactions : [],
       free_slots: freeSlots,
       skills
     };
+  }
+
+  /**
+   * System-Maintained Student Availability (`FREE`, `WORKING`, `OFFLINE`)
+   * - If assigned to any active (unsettled) gig -> strictly forced to `WORKING`
+   * - Otherwise -> `OFFLINE` if user toggled offline/exam-freeze, else `FREE`
+   */
+  getSystemComputedAvailability(user) {
+    if (!user || user.role !== 'STUDENT') return 'FREE';
+    const hasActiveAssignedGig = db.state.gigs.some(
+      (g) =>
+        !['ESCROW_LOCKED', 'SETTLED', 'AUTO_RELEASED', 'REFUNDED'].includes(g.state) &&
+        (g.assigned_lead_id === user.user_id || g.assigned_junior_id === user.user_id)
+    );
+    if (hasActiveAssignedGig) {
+      user.availability_status = 'WORKING';
+      return 'WORKING';
+    }
+    if (user.availability_status === 'OFFLINE' || user.exam_freeze_active) {
+      user.availability_status = 'OFFLINE';
+      return 'OFFLINE';
+    }
+    user.availability_status = 'FREE';
+    return 'FREE';
+  }
+
+  /**
+   * System-Maintained Gig Lifecycle Status (`ACTIVE`, `ASSIGNED`, `DELETED`)
+   */
+  computeGigLifecycleStatus(gig) {
+    if (!gig) return 'ACTIVE';
+    if (gig.state === 'ESCROW_LOCKED') {
+      gig.lifecycle_status = 'ACTIVE';
+      return 'ACTIVE';
+    }
+    if (['SETTLED', 'AUTO_RELEASED', 'REFUNDED'].includes(gig.state) || gig.lifecycle_status === 'DELETED') {
+      gig.lifecycle_status = 'DELETED';
+      return 'DELETED';
+    }
+    gig.lifecycle_status = 'ASSIGNED';
+    return 'ASSIGNED';
   }
 
   /**
@@ -199,7 +250,8 @@ class MorungGigEngine {
       user_id: userId,
       role,
       full_name: fullName,
-      email: input.email ? stripHtmlAndNormalize(input.email) : null,
+      email: input.email ? stripHtmlAndNormalize(input.email).toLowerCase() : `${userId.toLowerCase()}@morunggig.in`,
+      password_hash: hashPassword(input.password || 'password123'),
       google_sub: input.google_sub || null,
       institution_or_org: institutionOrOrg,
       stream_or_sector: streamOrSector,
@@ -210,13 +262,40 @@ class MorungGigEngine {
       contact_phone: `+91-${rawPhone.replace(/\D/g, '').slice(-10)}`,
       trust_score: 98.0,
       completed_gigs_cnt: 0,
-      wallet_balance_inr: role === 'STUDENT' ? 0 : 10000,
+      wallet_balance_inr: 0,
       exam_freeze_active: false,
       nda_accepted: true,
+      availability_status: 'FREE',
+      bio: stripHtmlAndNormalize(input.bio || `${streamOrSector} at ${institutionOrOrg}`),
+      wallet_transactions_json: JSON.stringify([
+        {
+          tx_id: `TX-WELCOME-${Date.now()}`,
+          type: 'ACCOUNT_CREATED',
+          amount_inr: 0,
+          note: 'Account created with ₹0 starting balance',
+          created_at: new Date().toISOString()
+        }
+      ]),
       free_slots_json: JSON.stringify(input.free_slots || ['WEEKDAY_AFTER_3PM', 'SATURDAY_ALL_DAY', 'ANYTIME_DIGITAL']),
       skills_json: JSON.stringify(input.skills || ['COMMERCE_OPS', 'CONTENT_REELS', 'EVENTS_STALLS', 'LANGUAGE_TUTOR']),
       created_at: new Date().toISOString()
     };
+
+    if (input.email) {
+      const emailLower = stripHtmlAndNormalize(input.email).toLowerCase();
+      const emailClash = db.state.users.find((u) => u.email && u.email.toLowerCase() === emailLower);
+      if (emailClash) {
+        return {
+          ok: false,
+          error: {
+            code: 'ERR-MG-EMAIL-409',
+            status: 409,
+            title: 'Email Already Registered',
+            detail: `An account with email '${emailLower}' already exists. Please log in instead.`
+          }
+        };
+      }
+    }
 
     db.state.users.push(newUser);
     await db.commitMutation();
@@ -230,6 +309,185 @@ class MorungGigEngine {
         salted_sha256_hash: kycIdHash,
         masked_phone_stored: masked
       }
+    };
+  }
+
+  /**
+   * Persistent Email + Password Login
+   */
+  loginWithPassword(emailOrId, password) {
+    const cleanInput = String(emailOrId || '').trim().toLowerCase();
+    const user = db.state.users.find(
+      (u) =>
+        (u.email && u.email.toLowerCase() === cleanInput) ||
+        u.user_id.toLowerCase() === cleanInput
+    );
+    if (!user) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-AUTH-401',
+          status: 401,
+          title: 'Account Not Found',
+          detail: 'No user found with that email address. Please sign up first.'
+        }
+      };
+    }
+
+    const storedHash = user.password_hash || hashPassword('password123');
+    if (!verifyPassword(password, storedHash)) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-AUTH-401',
+          status: 401,
+          title: 'Invalid Password',
+          detail: 'The password you entered is incorrect.'
+        }
+      };
+    }
+
+    return {
+      ok: true,
+      user: this.sanitizeUserForView(user, user.user_id)
+    };
+  }
+
+  /**
+   * Student Availability Toggle (`FREE` <-> `OFFLINE` only; `WORKING` is system-locked)
+   */
+  async setStudentAvailability(actorId, targetStatus) {
+    const rbac = this.verifyActorRole(actorId, ['STUDENT'], 'change student availability status');
+    if (!rbac.ok) return rbac;
+    const student = rbac.user;
+
+    const currentStatus = this.getSystemComputedAvailability(student);
+    if (currentStatus === 'WORKING') {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-WORKING-LOCKED',
+          status: 409,
+          title: 'Status Locked While Working',
+          detail: 'Your status is system-maintained as WORKING while you are assigned to an active job. You must complete or quit the active job before toggling to FREE or OFFLINE.'
+        }
+      };
+    }
+
+    const normalized = String(targetStatus || '').toUpperCase();
+    if (!['FREE', 'OFFLINE'].includes(normalized)) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-STATUS-400',
+          status: 400,
+          title: 'Invalid Availability Status',
+          detail: 'You can only toggle between FREE (Available) and OFFLINE. WORKING status is automatically managed by the system.'
+        }
+      };
+    }
+
+    student.availability_status = normalized;
+    student.exam_freeze_active = normalized === 'OFFLINE';
+    await db.commitMutation();
+
+    return {
+      ok: true,
+      user: this.sanitizeUserForView(student, student.user_id)
+    };
+  }
+
+  /**
+   * Update Own Profile (Strictly enforces user_id === actorId)
+   */
+  async updateOwnProfile(actorId, targetUserId, updates = {}) {
+    if (!actorId || (targetUserId && actorId !== targetUserId)) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-FORBIDDEN',
+          status: 403,
+          title: 'Privacy & Ownership Guardrail',
+          detail: 'You can only edit your own profile details.'
+        }
+      };
+    }
+    const user = db.state.users.find((u) => u.user_id === actorId);
+    if (!user) {
+      return { ok: false, error: { code: 'ERR-MG-404', status: 404, title: 'User Not Found', detail: 'User not found.' } };
+    }
+
+    if (updates.full_name) user.full_name = stripHtmlAndNormalize(updates.full_name).slice(0, 100);
+    if (updates.institution_or_org) user.institution_or_org = stripHtmlAndNormalize(updates.institution_or_org).slice(0, 120);
+    if (updates.corridor_cluster && NAGALAND_CONFIG.CORRIDORS[updates.corridor_cluster]) {
+      user.corridor_cluster = updates.corridor_cluster;
+    }
+    if (updates.upi_vpa) user.upi_vpa = stripHtmlAndNormalize(updates.upi_vpa).slice(0, 80);
+    if (updates.bio !== undefined) user.bio = stripHtmlAndNormalize(updates.bio).slice(0, 300);
+    if (Array.isArray(updates.skills)) {
+      user.skills_json = JSON.stringify(updates.skills);
+    }
+
+    await db.commitMutation();
+    return {
+      ok: true,
+      user: this.sanitizeUserForView(user, user.user_id)
+    };
+  }
+
+  /**
+   * Mock Wallet Withdrawal (Deducts from user.wallet_balance_inr & logs receipt)
+   */
+  async withdrawWalletBalance(actorId, amountInr, destinationUpi) {
+    if (!actorId) {
+      return { ok: false, error: { code: 'ERR-MG-AUTH-401', status: 401, title: 'Unauthorized', detail: 'Please log in to withdraw funds.' } };
+    }
+    const user = db.state.users.find((u) => u.user_id === actorId);
+    if (!user) {
+      return { ok: false, error: { code: 'ERR-MG-404', status: 404, title: 'Not Found', detail: 'User account not found.' } };
+    }
+
+    const amount = Math.round(Number(amountInr || 0));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return {
+        ok: false,
+        error: { code: 'ERR-MG-WD-400', status: 400, title: 'Invalid Amount', detail: 'Withdrawal amount must be greater than ₹0.' }
+      };
+    }
+
+    const currentBalance = Number(user.wallet_balance_inr || 0);
+    if (amount > currentBalance) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-WD-422',
+          status: 422,
+          title: 'Insufficient Account Balance',
+          detail: `Cannot withdraw ₹${amount}. Your available account balance is ₹${currentBalance}.`
+        }
+      };
+    }
+
+    user.wallet_balance_inr = currentBalance - amount;
+    let txList = [];
+    try { txList = JSON.parse(user.wallet_transactions_json || '[]'); } catch { txList = []; }
+    const txRecord = {
+      tx_id: `WD-UPI-${Date.now().toString().slice(-6)}`,
+      type: 'WITHDRAWAL',
+      amount_inr: -amount,
+      balance_after_inr: user.wallet_balance_inr,
+      upi_vpa: stripHtmlAndNormalize(destinationUpi || user.upi_vpa),
+      note: `Withdrawn ₹${amount} to UPI (${stripHtmlAndNormalize(destinationUpi || user.upi_vpa)})`,
+      created_at: new Date().toISOString()
+    };
+    txList.unshift(txRecord);
+    user.wallet_transactions_json = JSON.stringify(txList);
+
+    await db.commitMutation();
+    return {
+      ok: true,
+      withdrawal: txRecord,
+      user: this.sanitizeUserForView(user, user.user_id)
     };
   }
 
@@ -392,10 +650,35 @@ class MorungGigEngine {
       }
     }
 
+    let rawApplicants = [];
+    if (gig.applicants_json) {
+      try {
+        rawApplicants = JSON.parse(gig.applicants_json);
+      } catch {
+        rawApplicants = [];
+      }
+    }
+
+    const applicants = rawApplicants.map((app) => {
+      const stu = db.state.users.find((u) => u.user_id === app.student_id);
+      return {
+        ...app,
+        full_name: stu ? stu.full_name : app.full_name,
+        institution: stu ? stu.institution_or_org : app.institution,
+        availability_status: stu ? this.getSystemComputedAvailability(stu) : 'FREE',
+        completed_gigs_cnt: stu ? Number(stu.completed_gigs_cnt) : 0,
+        trust_score: stu ? Number(stu.trust_score) : 98.0
+      };
+    });
+
+    const lifecycleStatus = this.computeGigLifecycleStatus(gig);
     const isUnlocked = gig.state === 'SETTLED' || gig.state === 'AUTO_RELEASED';
 
     return {
       ...gig,
+      description: gig.description || `${gig.title}. Location: ${gig.venue_label}. Turnaround: ${gig.duration_label || 'Flexible'}.`,
+      lifecycle_status: lifecycleStatus,
+      applicants,
       payout_inr: Number(gig.payout_inr),
       platform_fee_inr: Number(gig.platform_fee_inr),
       total_escrow_locked_inr: Number(gig.payout_inr) + Number(gig.platform_fee_inr),
@@ -531,6 +814,7 @@ class MorungGigEngine {
       poster_id: posterUser.user_id,
       poster_type: s.poster_type,
       title: s.title,
+      description: stripHtmlAndNormalize(rawInput.description || `${s.title}. Location: ${s.venue_label}. Turnaround: ${s.duration_label}.`),
       portfolio_title: s.portfolio_title,
       track_category: s.track_category,
       execution_mode: s.execution_mode,
@@ -552,6 +836,8 @@ class MorungGigEngine {
       criteria_3: s.criteria_3,
       allow_morung_squad: s.allow_morung_squad,
       state: 'ESCROW_LOCKED',
+      lifecycle_status: 'ACTIVE',
+      applicants_json: '[]',
       execution_type: s.allow_morung_squad ? 'MORUNG_SQUAD_70_30' : 'SOLO',
       assigned_lead_id: null,
       assigned_junior_id: null,
@@ -627,7 +913,145 @@ class MorungGigEngine {
   }
 
   /**
-   * FR-MAT-03 & FR-MAT-04: Claim or Assign Gig (Solo 100% or Morung Squad 70/30 + Standby Buddy)
+   * Student Applies to an ACTIVE (`ESCROW_LOCKED`) Job
+   * Does NOT auto-assign! The Poster/Creator decides who will do the job.
+   */
+  async applyToGig(gigId, { actor_id, pitch_note }) {
+    const rbac = this.verifyActorRole(actor_id, ['STUDENT'], 'apply for a job');
+    if (!rbac.ok) return rbac;
+    const student = rbac.user;
+
+    const currentAvail = this.getSystemComputedAvailability(student);
+    if (currentAvail === 'OFFLINE') {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-OFFLINE-409',
+          status: 409,
+          title: 'Cannot Apply While Offline',
+          detail: 'Your profile status is currently OFFLINE. Toggle your status to FREE (Available) in your Profile before applying for jobs.'
+        }
+      };
+    }
+
+    const gig = db.state.gigs.find((g) => g.gig_id === gigId);
+    if (!gig) {
+      return { ok: false, error: { code: 'ERR-MG-404', status: 404, title: 'Job Not Found', detail: 'Job not found.' } };
+    }
+    if (gig.state !== 'ESCROW_LOCKED') {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-3001',
+          status: 409,
+          title: 'Job No Longer Accepting Applications',
+          detail: `Job ${gigId} is already ${gig.lifecycle_status || gig.state}.`
+        }
+      };
+    }
+
+    let applicants = [];
+    try { applicants = JSON.parse(gig.applicants_json || '[]'); } catch { applicants = []; }
+    if (applicants.some((a) => a.student_id === student.user_id)) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-ALREADY-APPLIED',
+          status: 409,
+          title: 'Already Applied',
+          detail: 'You have already submitted an application for this job. Waiting for the Poster to review applicants.'
+        }
+      };
+    }
+
+    applicants.push({
+      student_id: student.user_id,
+      full_name: student.full_name,
+      institution: student.institution_or_org,
+      pitch_note: stripHtmlAndNormalize(pitch_note || 'Interested and available to complete all 3 deliverables on schedule.'),
+      applied_at: new Date().toISOString()
+    });
+    gig.applicants_json = JSON.stringify(applicants);
+
+    this.enqueueNotification({
+      recipient_id: gig.poster_id,
+      gig_id: gig.gig_id,
+      title: `New Applicant for "${gig.title}"`,
+      message: `[MorungGig Application] ${student.full_name} (${student.institution_or_org}) applied for your job "${gig.title}". Review applicants in your Poster dashboard.`
+    });
+
+    await db.commitMutation();
+    return {
+      ok: true,
+      gig: this.enrichGig(gig, student.corridor_cluster, student.user_id)
+    };
+  }
+
+  /**
+   * Student Quits / Withdraws from an Assigned Job
+   * Returns job to `ACTIVE` (`ESCROW_LOCKED`) and frees student from `WORKING` status
+   */
+  async quitAssignedGig(gigId, { actor_id, reason, go_offline = false }) {
+    const rbac = this.verifyActorRole(actor_id, ['STUDENT'], 'quit an assigned job');
+    if (!rbac.ok) return rbac;
+    const student = rbac.user;
+
+    const gig = db.state.gigs.find((g) => g.gig_id === gigId);
+    if (!gig) return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
+
+    if (gig.assigned_lead_id !== student.user_id && gig.assigned_junior_id !== student.user_id) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-FORBIDDEN',
+          status: 403,
+          title: 'Ownership Guardrail',
+          detail: 'You are not the assigned student on this job.'
+        }
+      };
+    }
+
+    if (['SETTLED', 'AUTO_RELEASED', 'REFUNDED'].includes(gig.state)) {
+      return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
+    }
+
+    const prevState = gig.state;
+    gig.state = 'ESCROW_LOCKED';
+    gig.lifecycle_status = 'ACTIVE';
+    gig.assigned_lead_id = null;
+    gig.assigned_junior_id = null;
+    gig.checkpoint_note = null;
+    gig.vault_payload_json = null;
+
+    if (go_offline) {
+      student.availability_status = 'OFFLINE';
+      student.exam_freeze_active = true;
+    } else {
+      student.availability_status = 'FREE';
+      student.exam_freeze_active = false;
+    }
+    this.getSystemComputedAvailability(student);
+
+    this.appendAuditLog({
+      gig_id: gig.gig_id,
+      actor_id: student.user_id,
+      from_state: prevState,
+      to_state: 'ESCROW_LOCKED',
+      action_summary: `Student ${student.full_name} quit job (${reason || 'Withdrew from assignment'}); job reopened as ACTIVE`,
+      utr_or_hash: `QUIT-${Date.now()}`
+    });
+
+    await db.commitMutation();
+    return {
+      ok: true,
+      gig: this.enrichGig(gig, student.corridor_cluster, student.user_id),
+      user: this.sanitizeUserForView(student, student.user_id)
+    };
+  }
+
+  /**
+   * FR-MAT-03 & FR-MAT-04: Poster Assigns Chosen Applicant to Job
+   * Enforces Poster ownership (`gig.poster_id === actor_id`) & sets Student status to `WORKING`
    */
   async assignOrClaimGig(gigId, { lead_student_id, junior_student_id, execution_type = 'SOLO', actor_id }) {
     const gig = db.state.gigs.find((g) => g.gig_id === gigId);
@@ -636,6 +1060,55 @@ class MorungGigEngine {
     }
     if (gig.state !== 'ESCROW_LOCKED') {
       return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
+    }
+
+    // Enforce strict Poster ownership when actor_id is provided
+    if (actor_id) {
+      const rbac = this.verifyActorRole(actor_id, ['POSTER_BUSINESS', 'POSTER_INDIVIDUAL'], 'assign a student to this job');
+      if (!rbac.ok) return rbac;
+      if (gig.poster_id !== actor_id) {
+        return {
+          ok: false,
+          error: {
+            code: 'ERR-MG-FORBIDDEN',
+            status: 403,
+            title: 'Poster Ownership Guardrail',
+            detail: 'You cannot assign students or modify a job posted by another user.'
+          }
+        };
+      }
+    }
+
+    if (!lead_student_id) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-400',
+          status: 400,
+          title: 'Missing Selected Student',
+          detail: 'Please select a specific student applicant to assign to this job.'
+        }
+      };
+    }
+
+    const targetStudent = db.state.users.find((u) => u.user_id === lead_student_id && u.role === 'STUDENT');
+    if (!targetStudent) {
+      return {
+        ok: false,
+        error: { code: 'ERR-MG-404', status: 404, title: 'Student Not Found', detail: 'Selected student account does not exist.' }
+      };
+    }
+
+    if (this.getSystemComputedAvailability(targetStudent) === 'OFFLINE') {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-OFFLINE-409',
+          status: 409,
+          title: 'Student Currently Offline',
+          detail: `${targetStudent.full_name} is currently marked OFFLINE and is not taking new jobs.`
+        }
+      };
     }
 
     const isSquad = execution_type === 'MORUNG_SQUAD_70_30' || execution_type === 'MORUNG_SQUAD' || Boolean(junior_student_id);
@@ -653,7 +1126,7 @@ class MorungGigEngine {
       return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-1004'] };
     }
 
-    const leadId = lead_student_id || 'USR-STU-01';
+    const leadId = targetStudent.user_id;
     const juniorId = isSquad ? (junior_student_id || 'USR-STU-02') : null;
 
     // Pre-bind Rank #2 verified student as Standby Buddy (FR-MAT-05)
@@ -666,6 +1139,14 @@ class MorungGigEngine {
     gig.assigned_junior_id = juniorId;
     gig.standby_buddy_id = standbyId;
     gig.execution_type = isSquad ? 'MORUNG_SQUAD_70_30' : 'SOLO';
+    gig.lifecycle_status = 'ASSIGNED';
+
+    // System-maintain Student Availability -> WORKING
+    targetStudent.availability_status = 'WORKING';
+    if (juniorId) {
+      const jrUser = db.state.users.find((u) => u.user_id === juniorId);
+      if (jrUser) jrUser.availability_status = 'WORKING';
+    }
 
     const splitCalc = calculateEscrowAndSplit(gig.payout_inr, gig.execution_type);
     const escrow = db.state.escrow_ledger.find((e) => e.gig_id === gig.gig_id);
@@ -718,6 +1199,17 @@ class MorungGigEngine {
     }
     const gig = db.state.gigs.find((g) => g.gig_id === gigId);
     if (!gig) return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
+    if (actor_id && gig.assigned_lead_id && gig.assigned_lead_id !== actor_id && gig.assigned_junior_id !== actor_id) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-FORBIDDEN',
+          status: 403,
+          title: 'Student Ownership Guardrail',
+          detail: 'You cannot submit checkpoints or modify work for a job assigned to another student.'
+        }
+      };
+    }
     if (gig.state !== 'ASSIGNED_DIGITAL') {
       return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
     }
@@ -798,6 +1290,17 @@ class MorungGigEngine {
     }
     const gig = db.state.gigs.find((g) => g.gig_id === gigId);
     if (!gig) return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
+    if (uploaderId && gig.assigned_lead_id && gig.assigned_lead_id !== uploaderId && gig.assigned_junior_id !== uploaderId) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-FORBIDDEN',
+          status: 403,
+          title: 'Student Ownership Guardrail',
+          detail: 'You can only upload deliverables for jobs that are assigned to you.'
+        }
+      };
+    }
     if (!['ASSIGNED_DIGITAL', 'CHECKPOINT_VERIFIED'].includes(gig.state)) {
       return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
     }
@@ -928,6 +1431,17 @@ class MorungGigEngine {
     }
     const gig = db.state.gigs.find((g) => g.gig_id === gigId);
     if (!gig) return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
+    if (actor_id && gig.poster_id !== actor_id) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-FORBIDDEN',
+          status: 403,
+          title: 'Poster Ownership Guardrail',
+          detail: 'You cannot request revisions on a job posted by another user.'
+        }
+      };
+    }
     if (gig.state !== 'DELIVERED_VAULT') {
       return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
     }
@@ -1134,6 +1648,17 @@ class MorungGigEngine {
     }
     const gig = db.state.gigs.find((g) => g.gig_id === gigId);
     if (!gig) return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
+    if (actor_id && trigger_type === 'POSTER_APPROVAL' && gig.poster_id !== actor_id) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-FORBIDDEN',
+          status: 403,
+          title: 'Poster Ownership Guardrail',
+          detail: 'You can only approve and settle jobs that you posted.'
+        }
+      };
+    }
 
     // Idempotency Guard (NFR-SEC-04): Prevent double-settlement
     if (['SETTLED', 'AUTO_RELEASED', 'REFUNDED'].includes(gig.state)) {
@@ -1197,6 +1722,7 @@ class MorungGigEngine {
       gig.state = 'SETTLED';
     }
 
+    gig.lifecycle_status = 'DELETED';
     gig.auto_release_at = null;
     gig.safety_beacon_active = false;
 
@@ -1216,14 +1742,30 @@ class MorungGigEngine {
       }
     }
 
-    // Credit Wallets & Update Reliability Scores
+    // Credit Wallets, Log Wallet Transactions & Reconcile Student Availability (`WORKING` -> `FREE`)
     const leadUser = db.state.users.find((u) => u.user_id === (gig.assigned_lead_id || 'USR-STU-01'));
     const juniorUser = isSquad ? db.state.users.find((u) => u.user_id === gig.assigned_junior_id) : null;
     const posterUser = db.state.users.find((u) => u.user_id === gig.poster_id);
 
+    const appendWalletCredit = (userObj, amt, desc) => {
+      if (!userObj || amt <= 0) return;
+      let txs = [];
+      try { txs = JSON.parse(userObj.wallet_transactions_json || '[]'); } catch { txs = []; }
+      txs.unshift({
+        tx_id: `CR-${Date.now().toString().slice(-6)}`,
+        type: 'CREDIT_ESCROW',
+        amount_inr: amt,
+        balance_after_inr: Number(userObj.wallet_balance_inr),
+        note: desc,
+        created_at: nowIso
+      });
+      userObj.wallet_transactions_json = JSON.stringify(txs);
+    };
+
     if (gig.state === 'REFUNDED') {
       if (posterUser) {
         posterUser.wallet_balance_inr = Number(posterUser.wallet_balance_inr) + splitCalc.posterRefundInr;
+        appendWalletCredit(posterUser, splitCalc.posterRefundInr, `Escrow Refund for ${gig.gig_id} (${gig.title})`);
       }
       if (leadUser) {
         leadUser.trust_score = Math.max(50, Number((Number(leadUser.trust_score) - 4.0).toFixed(1)));
@@ -1233,19 +1775,25 @@ class MorungGigEngine {
         leadUser.wallet_balance_inr = Number(leadUser.wallet_balance_inr) + splitCalc.leadPayoutInr;
         leadUser.completed_gigs_cnt = Number(leadUser.completed_gigs_cnt) + 1;
         leadUser.trust_score = Math.min(100, Number((Number(leadUser.trust_score) + 0.2).toFixed(1)));
+        appendWalletCredit(leadUser, splitCalc.leadPayoutInr, `Escrow Settled for ${gig.gig_id} (${gig.title})`);
       }
       if (juniorUser && splitCalc.juniorPayoutInr > 0) {
         juniorUser.wallet_balance_inr = Number(juniorUser.wallet_balance_inr) + splitCalc.juniorPayoutInr;
         juniorUser.completed_gigs_cnt = Number(juniorUser.completed_gigs_cnt) + 1;
         juniorUser.trust_score = Math.min(100, Number((Number(juniorUser.trust_score) + 0.3).toFixed(1)));
+        appendWalletCredit(juniorUser, splitCalc.juniorPayoutInr, `Squad 30% Settled for ${gig.gig_id} (${gig.title})`);
       }
       if (posterUser) {
         posterUser.completed_gigs_cnt = Number(posterUser.completed_gigs_cnt) + 1;
         if (splitCalc.posterRefundInr > 0) {
           posterUser.wallet_balance_inr = Number(posterUser.wallet_balance_inr) + splitCalc.posterRefundInr;
+          appendWalletCredit(posterUser, splitCalc.posterRefundInr, `50% Arbitration Refund for ${gig.gig_id}`);
         }
       }
     }
+
+    if (leadUser) this.getSystemComputedAvailability(leadUser);
+    if (juniorUser) this.getSystemComputedAvailability(juniorUser);
 
     // FR-PAS-01: Mint Verifiable QR Skill Credentials if student earned > 0
     const mintedCredentials = [];
@@ -1352,6 +1900,17 @@ class MorungGigEngine {
     }
     const gig = db.state.gigs.find((g) => g.gig_id === gigId);
     if (!gig) return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
+    if (actor_id && gig.poster_id !== actor_id) {
+      return {
+        ok: false,
+        error: {
+          code: 'ERR-MG-FORBIDDEN',
+          status: 403,
+          title: 'Poster Ownership Guardrail',
+          detail: 'You can only raise disputes on jobs that you posted.'
+        }
+      };
+    }
     if (gig.state !== 'DELIVERED_VAULT') {
       return { ok: false, error: NAGALAND_CONFIG.ERRORS['ERR-MG-3001'] };
     }

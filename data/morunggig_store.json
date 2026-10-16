@@ -20,7 +20,11 @@
       "nda_accepted": true,
       "free_slots_json": "[\"WEEKDAY_AFTER_3PM\",\"SATURDAY_ALL_DAY\",\"ANYTIME_DIGITAL\"]",
       "skills_json": "[\"CONTENT_REELS\",\"COMMERCE_OPS\",\"EVENTS_STALLS\",\"LANGUAGE_TUTOR\"]",
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     },
     {
       "user_id": "USR-STU-03",
@@ -42,7 +46,11 @@
       "nda_accepted": true,
       "free_slots_json": "[\"WEEKDAY_AFTER_3PM\",\"SATURDAY_ALL_DAY\",\"ANYTIME_DIGITAL\"]",
       "skills_json": "[\"COMMERCE_OPS\",\"CONTENT_REELS\",\"LANGUAGE_TUTOR\",\"DIGITAL_TECH\"]",
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     },
     {
       "user_id": "USR-STU-04",
@@ -64,7 +72,11 @@
       "nda_accepted": true,
       "free_slots_json": "[\"ANYTIME_DIGITAL\",\"SATURDAY_ALL_DAY\"]",
       "skills_json": "[\"DIGITAL_TECH\",\"LANGUAGE_TUTOR\",\"CONTENT_REELS\"]",
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     },
     {
       "user_id": "USR-POS-01",
@@ -86,7 +98,11 @@
       "nda_accepted": true,
       "free_slots_json": "[]",
       "skills_json": "[]",
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     },
     {
       "user_id": "USR-POS-02",
@@ -108,7 +124,11 @@
       "nda_accepted": true,
       "free_slots_json": "[]",
       "skills_json": "[]",
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     },
     {
       "user_id": "USR-POS-03",
@@ -130,7 +150,11 @@
       "nda_accepted": true,
       "free_slots_json": "[]",
       "skills_json": "[]",
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     },
     {
       "user_id": "USR-EDC-01",
@@ -152,7 +176,11 @@
       "nda_accepted": true,
       "free_slots_json": "[]",
       "skills_json": "[]",
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     },
     {
       "user_id": "USR-STU-02",
@@ -174,7 +202,11 @@
       "nda_accepted": true,
       "free_slots_json": "[\"WEEKDAY_AFTER_3PM\",\"SATURDAY_ALL_DAY\",\"ANYTIME_DIGITAL\"]",
       "skills_json": "[\"COMMERCE_OPS\",\"CONTENT_REELS\",\"EVENTS_STALLS\"]",
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     },
     {
       "user_id": "USR-GGL-367",
@@ -196,7 +228,11 @@
       "nda_accepted": true,
       "free_slots_json": "[\"WEEKDAY_AFTER_3PM\",\"SATURDAY_ALL_DAY\",\"ANYTIME_DIGITAL\"]",
       "skills_json": "[\"CONTENT_REELS\",\"COMMERCE_OPS\",\"EVENTS_STALLS\",\"LANGUAGE_TUTOR\",\"DIGITAL_TECH\"]",
-      "created_at": "2026-10-15T21:26:58.326Z"
+      "created_at": "2026-10-15T21:26:58.326Z",
+      "password_hash": null,
+      "availability_status": "FREE",
+      "bio": "",
+      "wallet_transactions_json": "[]"
     }
   ],
   "gigs": [
@@ -242,7 +278,10 @@
       "dispute_reason": null,
       "disputed_checkbox": null,
       "auto_release_at": "2026-10-17T15:13:58.812Z",
-      "created_at": "2026-10-15T18:32:55.672Z"
+      "created_at": "2026-10-15T18:32:55.672Z",
+      "description": "",
+      "lifecycle_status": "ACTIVE",
+      "applicants_json": "[]"
     },
     {
       "gig_id": "GIG-NL-2026-102",
@@ -286,7 +325,10 @@
       "dispute_reason": null,
       "disputed_checkbox": null,
       "auto_release_at": null,
-      "created_at": "2026-10-15T18:32:55.672Z"
+      "created_at": "2026-10-15T18:32:55.672Z",
+      "description": "",
+      "lifecycle_status": "ACTIVE",
+      "applicants_json": "[]"
     },
     {
       "gig_id": "GIG-NL-2026-103",
@@ -330,7 +372,10 @@
       "dispute_reason": null,
       "disputed_checkbox": null,
       "auto_release_at": null,
-      "created_at": "2026-10-15T18:32:55.672Z"
+      "created_at": "2026-10-15T18:32:55.672Z",
+      "description": "",
+      "lifecycle_status": "ACTIVE",
+      "applicants_json": "[]"
     },
     {
       "gig_id": "GIG-NL-2026-104",
@@ -374,7 +419,10 @@
       "dispute_reason": null,
       "disputed_checkbox": null,
       "auto_release_at": null,
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "description": "",
+      "lifecycle_status": "ACTIVE",
+      "applicants_json": "[]"
     },
     {
       "gig_id": "GIG-NL-2026-105",
@@ -418,51 +466,10 @@
       "dispute_reason": null,
       "disputed_checkbox": null,
       "auto_release_at": null,
-      "created_at": "2026-10-14T20:32:55.672Z"
-    },
-    {
-      "gig_id": "GIG-NL-2026-100",
-      "poster_id": "USR-POS-01",
-      "poster_type": "POSTER_BUSINESS",
-      "title": "Sovima Cafe Opening Week Inventory & POS Menu Setup",
-      "portfolio_title": "Retail Inventory & Digital Ledger Micro-Audit Fellowship",
-      "track_category": "COMMERCE_OPS",
-      "execution_mode": "DIGITAL",
-      "corridor_cluster": "SOVIMA_6MILE",
-      "venue_label": "Yes Coffee Sovima",
-      "is_public_venue": true,
-      "is_church_event": false,
-      "scheduled_day": "SATURDAY",
-      "scheduled_end_hour": 16,
-      "payout_inr": 800,
-      "platform_fee_inr": 40,
-      "extra_scope_topup_inr": 0,
-      "duration_label": "4 Hours Completed",
-      "required_slot": "SATURDAY_ALL_DAY",
-      "language_tag": "English / Nagamese",
-      "requires_nda": true,
-      "criteria_1": "Structure 95 cafe POS SKU codes with GST tax slabs",
-      "criteria_2": "Verify supplier invoice reconciliation in Excel",
-      "criteria_3": "Upload clean master workbook to Vault",
-      "allow_morung_squad": true,
-      "state": "SETTLED",
-      "execution_type": "MORUNG_SQUAD_70_30",
-      "assigned_lead_id": "USR-STU-01",
-      "assigned_junior_id": "USR-STU-02",
-      "standby_buddy_id": "USR-STU-03",
-      "checkpoint_note": "20% Checkpoint Verified on time.",
-      "checkpoint_at": "2026-10-14T21:31:47.578Z",
-      "revisions_left": 2,
-      "revision_notes_json": "[]",
-      "start_pin": null,
-      "complete_pin": null,
-      "safety_beacon_active": false,
-      "onsite_started_at": null,
-      "vault_payload_json": "{\"deliverable_title\":\"YesCoffee_POS_Master_Ledger.xlsx\",\"deliverable_type\":\"VISUAL_AND_TABULAR\",\"preview_summary\":\"95-SKU Reconciled POS & Inventory Sheet (Clean Master Unlocked)\",\"file_sha256\":\"4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a\",\"criteria_checked\":[true,true,true],\"uploaded_by\":\"USR-STU-01\",\"uploaded_at\":\"2026-10-14T21:31:47.578Z\",\"tabular_rows\":[]}",
-      "dispute_reason": null,
-      "disputed_checkbox": null,
-      "auto_release_at": null,
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "description": "",
+      "lifecycle_status": "ACTIVE",
+      "applicants_json": "[]"
     },
     {
       "gig_id": "GIG-NL-2026-106",
@@ -506,24 +513,60 @@
       "dispute_reason": "Checkbox #3: Storefront Saturday hours still showing 7 PM instead of 4:30 PM winter timing; Checkbox #1 & #2 are complete.",
       "disputed_checkbox": 3,
       "auto_release_at": null,
-      "created_at": "2026-10-14T20:32:55.672Z"
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "description": "",
+      "lifecycle_status": "ACTIVE",
+      "applicants_json": "[]"
+    },
+    {
+      "gig_id": "GIG-NL-2026-100",
+      "poster_id": "USR-POS-01",
+      "poster_type": "POSTER_BUSINESS",
+      "title": "Sovima Cafe Opening Week Inventory & POS Menu Setup",
+      "portfolio_title": "Retail Inventory & Digital Ledger Micro-Audit Fellowship",
+      "track_category": "COMMERCE_OPS",
+      "execution_mode": "DIGITAL",
+      "corridor_cluster": "SOVIMA_6MILE",
+      "venue_label": "Yes Coffee Sovima",
+      "is_public_venue": true,
+      "is_church_event": false,
+      "scheduled_day": "SATURDAY",
+      "scheduled_end_hour": 16,
+      "payout_inr": 800,
+      "platform_fee_inr": 40,
+      "extra_scope_topup_inr": 0,
+      "duration_label": "4 Hours Completed",
+      "required_slot": "SATURDAY_ALL_DAY",
+      "language_tag": "English / Nagamese",
+      "requires_nda": true,
+      "criteria_1": "Structure 95 cafe POS SKU codes with GST tax slabs",
+      "criteria_2": "Verify supplier invoice reconciliation in Excel",
+      "criteria_3": "Upload clean master workbook to Vault",
+      "allow_morung_squad": true,
+      "state": "SETTLED",
+      "execution_type": "MORUNG_SQUAD_70_30",
+      "assigned_lead_id": "USR-STU-01",
+      "assigned_junior_id": "USR-STU-02",
+      "standby_buddy_id": "USR-STU-03",
+      "checkpoint_note": "20% Checkpoint Verified on time.",
+      "checkpoint_at": "2026-10-14T21:31:47.578Z",
+      "revisions_left": 2,
+      "revision_notes_json": "[]",
+      "start_pin": null,
+      "complete_pin": null,
+      "safety_beacon_active": false,
+      "onsite_started_at": null,
+      "vault_payload_json": "{\"deliverable_title\":\"YesCoffee_POS_Master_Ledger.xlsx\",\"deliverable_type\":\"VISUAL_AND_TABULAR\",\"preview_summary\":\"95-SKU Reconciled POS & Inventory Sheet (Clean Master Unlocked)\",\"file_sha256\":\"4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a\",\"criteria_checked\":[true,true,true],\"uploaded_by\":\"USR-STU-01\",\"uploaded_at\":\"2026-10-14T21:31:47.578Z\",\"tabular_rows\":[]}",
+      "dispute_reason": null,
+      "disputed_checkbox": null,
+      "auto_release_at": null,
+      "created_at": "2026-10-14T20:32:55.672Z",
+      "description": "",
+      "lifecycle_status": "ACTIVE",
+      "applicants_json": "[]"
     }
   ],
   "escrow_ledger": [
-    {
-      "escrow_id": "ESC-2026-901",
-      "gig_id": "GIG-NL-2026-101",
-      "utr_reference": "UPI-628819042101",
-      "locked_payout_inr": 900,
-      "platform_fee_inr": 45,
-      "lead_payout_inr": 900,
-      "junior_payout_inr": 0,
-      "poster_refund_inr": 0,
-      "status": "LOCKED",
-      "webhook_event_id": "evt_seed_101",
-      "locked_at": "2026-10-15T18:32:55.672Z",
-      "settled_at": null
-    },
     {
       "escrow_id": "ESC-2026-902",
       "gig_id": "GIG-NL-2026-102",
@@ -535,6 +578,20 @@
       "poster_refund_inr": 0,
       "status": "LOCKED",
       "webhook_event_id": "evt_seed_102",
+      "locked_at": "2026-10-15T18:32:55.672Z",
+      "settled_at": null
+    },
+    {
+      "escrow_id": "ESC-2026-901",
+      "gig_id": "GIG-NL-2026-101",
+      "utr_reference": "UPI-628819042101",
+      "locked_payout_inr": 900,
+      "platform_fee_inr": 45,
+      "lead_payout_inr": 900,
+      "junior_payout_inr": 0,
+      "poster_refund_inr": 0,
+      "status": "LOCKED",
+      "webhook_event_id": "evt_seed_101",
       "locked_at": "2026-10-15T18:32:55.672Z",
       "settled_at": null
     },
@@ -553,18 +610,18 @@
       "settled_at": null
     },
     {
-      "escrow_id": "ESC-2026-904",
-      "gig_id": "GIG-NL-2026-104",
-      "utr_reference": "UPI-628819042104",
-      "locked_payout_inr": 1000,
-      "platform_fee_inr": 50,
-      "lead_payout_inr": 700,
-      "junior_payout_inr": 300,
+      "escrow_id": "ESC-2026-906",
+      "gig_id": "GIG-NL-2026-106",
+      "utr_reference": "UPI-628819042106",
+      "locked_payout_inr": 800,
+      "platform_fee_inr": 40,
+      "lead_payout_inr": 800,
+      "junior_payout_inr": 0,
       "poster_refund_inr": 0,
-      "status": "SETTLED_SQUAD_70_30",
-      "webhook_event_id": "evt_seed_104",
+      "status": "LOCKED",
+      "webhook_event_id": "evt_seed_106",
       "locked_at": "2026-10-14T20:32:55.672Z",
-      "settled_at": "2026-10-15T21:32:17.169Z"
+      "settled_at": null
     },
     {
       "escrow_id": "ESC-2026-905",
@@ -581,20 +638,6 @@
       "settled_at": null
     },
     {
-      "escrow_id": "ESC-2026-906",
-      "gig_id": "GIG-NL-2026-106",
-      "utr_reference": "UPI-628819042106",
-      "locked_payout_inr": 800,
-      "platform_fee_inr": 40,
-      "lead_payout_inr": 800,
-      "junior_payout_inr": 0,
-      "poster_refund_inr": 0,
-      "status": "LOCKED",
-      "webhook_event_id": "evt_seed_106",
-      "locked_at": "2026-10-14T20:32:55.672Z",
-      "settled_at": null
-    },
-    {
       "escrow_id": "ESC-2026-900",
       "gig_id": "GIG-NL-2026-100",
       "utr_reference": "UTR-SPLIT-88492000",
@@ -607,6 +650,20 @@
       "webhook_event_id": "evt_seed_100",
       "locked_at": "2026-10-14T20:32:55.672Z",
       "settled_at": "2026-10-14T21:31:47.578Z"
+    },
+    {
+      "escrow_id": "ESC-2026-904",
+      "gig_id": "GIG-NL-2026-104",
+      "utr_reference": "UPI-628819042104",
+      "locked_payout_inr": 1000,
+      "platform_fee_inr": 50,
+      "lead_payout_inr": 700,
+      "junior_payout_inr": 300,
+      "poster_refund_inr": 0,
+      "status": "SETTLED_SQUAD_70_30",
+      "webhook_event_id": "evt_seed_104",
+      "locked_at": "2026-10-14T20:32:55.672Z",
+      "settled_at": "2026-10-15T21:32:17.169Z"
     }
   ],
   "skill_credentials": [
@@ -667,31 +724,8 @@
       "issued_at": "2026-10-14T20:32:55.672Z"
     }
   ],
-  "audit_logs": [
-    {
-      "log_id": 1,
-      "gig_id": "GIG-NL-2026-102",
-      "actor_id": "USR-STU-01",
-      "from_state": "ESCROW_LOCKED",
-      "to_state": "ASSIGNED_DIGITAL",
-      "action_summary": "Assigned Solo Specialist (USR-STU-01 = ₹700); Standby Buddy: USR-STU-03",
-      "utr_or_hash": "UPI-628819042102",
-      "logged_at": "2026-10-16T03:34:41.281Z"
-    }
-  ],
-  "notifications_outbox": [
-    {
-      "notification_id": "NOTIF-1792121681282-514",
-      "recipient_id": "USR-POS-01",
-      "gig_id": "GIG-NL-2026-102",
-      "channel": "WHATSAPP_INAPP",
-      "title": "Contract Assigned: Monthly Roastery Bean & Packaging Stock Excel Reconciliation",
-      "message": "[MorungGig] Solo Specialist assigned to GIG-NL-2026-102. 20% Checkpoint timer started.",
-      "whatsapp_uri": "https://wa.me/919436011020?text=%5BMorungGig%5D%20Solo%20Specialist%20assigned%20to%20GIG-NL-2026-102.%2020%25%20Checkpoint%20timer%20started.",
-      "is_read": false,
-      "created_at": "2026-10-16T03:34:41.282Z"
-    }
-  ],
+  "audit_logs": [],
+  "notifications_outbox": [],
   "processed_webhooks": [
     "evt_seed_100",
     "evt_seed_101",

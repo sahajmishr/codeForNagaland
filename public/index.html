@@ -9,101 +9,228 @@
 <body>
 
   <!-- ========================================================================
-       CLEAN MODERN NAVBAR WITH EXPLICIT ROLE PORTAL SWITCHER
+       PERSISTENT TOP NAVBAR
        ======================================================================== -->
   <header class="navbar">
     <div class="navbar-inner">
       <div class="brand">
-        <div class="brand-logo">MG</div>
-        <span class="brand-name">MorungGig</span>
+        <div class="brand-mark">MG</div>
+        <span class="brand-title">MorungGig</span>
+        <span class="tag hidden" id="headerRoleBadge"></span>
       </div>
 
-      <!-- 1-Click Role Portal Switcher (Backed by Database Role Auth) -->
-      <div class="role-switcher-bar" role="tablist" aria-label="Switch Role Portal">
-        <button type="button" class="role-pill-btn active" id="portalBtnStudent" onclick="window.switchRolePortal('STUDENT')">
-          Student Portal
-        </button>
-        <button type="button" class="role-pill-btn" id="portalBtnPoster" onclick="window.switchRolePortal('POSTER')">
-          Poster / Client Portal
-        </button>
-        <button type="button" class="role-pill-btn" id="portalBtnEdc" onclick="window.switchRolePortal('EDC')">
-          EDC Arbitrator
-        </button>
-      </div>
+      <!-- Role-Specific Navigation Tabs (Visible Only When Logged In) -->
+      <nav class="nav-tabs hidden" id="mainNavTabs" aria-label="Workspace Tabs"></nav>
 
-      <div class="navbar-right">
-        <span class="tag" id="activeUserTag">Toshi Ao (Student)</span>
-        <button type="button" class="btn btn-sm" id="openAuthModalBtn">Sign In</button>
+      <!-- Logged-In User Status, Balance & Logout -->
+      <div class="nav-right" id="headerRightBox">
+        <span class="tag" id="guestStatusTag">Not Signed In</span>
       </div>
     </div>
   </header>
 
   <!-- ========================================================================
-       MAIN CONTAINER (RENDERS ONLY THE LOGGED-IN ROLE'S PORTAL)
+       1. AUTHENTICATION SCREEN (LOGIN & SIGN UP — PERSISTENT SESSIONS & COOKIES)
        ======================================================================== -->
-  <main class="container">
-
-    <!-- Role Header -->
-    <div class="portal-header">
-      <div>
-        <div class="portal-eyebrow" id="portalEyebrow">STUDENT WORKSPACE • CANNOT POST OR SETTLE JOBS</div>
-        <h1 class="portal-title" id="portalTitle">Find Verified Campus Jobs</h1>
-        <p class="portal-sub" id="portalSub">Browse escrow-backed tasks, accept work, and submit deliverables.</p>
+  <main id="authScreen" class="auth-shell">
+    <div class="auth-card">
+      <div style="text-align:center; margin-bottom:20px;">
+        <h1 style="font-size:20px; font-weight:650;">Welcome to MorungGig</h1>
+        <p style="font-size:13px; color:var(--text-secondary); margin-top:4px;">
+          Sign in or create a verified Student or Poster account
+        </p>
       </div>
-      <div id="portalQuickStat"></div>
-    </div>
 
-    <!-- Role-Isolated Sub-Navigation -->
-    <nav class="subnav" id="roleSubnav"></nav>
-
-    <!-- ======================================================================
-         1. STUDENT PORTAL VIEWS (ONLY VISIBLE TO STUDENTS)
-         ====================================================================== -->
-    <section id="sec-student-find" class="portal-section">
-      <div style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;">
-        <input type="search" id="studentSearchInput" class="input" style="max-width:300px;" placeholder="Search jobs..." />
-        <select id="studentCorridorSelect" class="select" style="width:auto;">
-          <option value="SOVIMA_6MILE" selected>My Campus: Sovima / 6th Mile</option>
-          <option value="CHUMOUKEDIMA">My Campus: Chümoukedima</option>
-          <option value="DIMAPUR_TOWN">My Campus: Dimapur Town</option>
-          <option value="KOHIMA_TOWN">My Campus: Kohima Town</option>
-          <option value="JOTSOMA_MERIEMA">My Campus: Jotsoma / Meriema</option>
-        </select>
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" id="tabBtnLogin" onclick="window.switchAuthMode('LOGIN')">
+          Log In
+        </button>
+        <button type="button" class="auth-tab" id="tabBtnSignup" onclick="window.switchAuthMode('SIGNUP')">
+          Sign Up (Create Account)
+        </button>
       </div>
-      <div id="studentFindGrid" class="cards-grid"></div>
-    </section>
 
-    <section id="sec-student-work" class="portal-section hidden">
-      <div id="studentWorkList"></div>
-    </section>
+      <!-- LOG IN FORM -->
+      <form id="loginForm" class="form-stack">
+        <div class="field">
+          <label for="loginEmail">Email Address</label>
+          <input type="email" id="loginEmail" class="input" required placeholder="you@college.edu.in or business@email.com" />
+        </div>
+        <div class="field">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" class="input" required placeholder="••••••••" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Sign In to Workspace</button>
 
-    <section id="sec-student-wallet" class="portal-section hidden">
-      <div id="studentWalletList" class="cards-grid"></div>
-    </section>
-
-    <!-- ======================================================================
-         2. POSTER / CLIENT PORTAL VIEWS (ONLY VISIBLE TO POSTERS)
-         ====================================================================== -->
-    <section id="sec-poster-post" class="portal-section hidden">
-      <div class="card" style="max-width: 680px;">
-        <div style="margin-bottom:14px;">
-          <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
-            Quick Fill Template (Optional)
-          </div>
-          <div id="posterPresetRow" class="preset-row"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid var(--border);">
+          <span style="font-size:12px; color:var(--text-secondary);">Or sign in with Google OAuth</span>
+          <button type="button" class="btn btn-sm" id="googleOAuthLoginBtn">Continue with Google</button>
         </div>
 
-        <form id="simplePostJobForm" class="form-stack">
+        <!-- Quick Fill Helper for Testing Multi-User Flows -->
+        <div style="background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; margin-top:6px;">
+          <div style="font-size:11.5px; color:var(--text-muted); margin-bottom:6px;">
+            Quick Fill Existing Database Accounts (Password: <span class="mono">password123</span>):
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-sm" onclick="window.quickFillLogin('sentila.jamir@tetsocollege.org')">
+              Student: Sentila Jamir
+            </button>
+            <button type="button" class="btn btn-sm" onclick="window.quickFillLogin('kevisezo@kscj.ac.in')">
+              Student: Kevisezo Angami
+            </button>
+            <button type="button" class="btn btn-sm" onclick="window.quickFillLogin('ops@yescoffeenagaland.in')">
+              Poster: Yes Coffee
+            </button>
+            <button type="button" class="btn btn-sm" onclick="window.quickFillLogin('hello@tsuipucrafts.in')">
+              Poster: Tsüipu Crafts
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- SIGN UP FORM (STORES NEW USER IN DATABASE + CREATES SESSION COOKIE) -->
+      <form id="signupForm" class="form-stack hidden">
+        <div class="field">
+          <label for="signupRole">I am registering as a</label>
+          <select id="signupRole" class="select">
+            <option value="STUDENT" selected>Student (Apply for Jobs, Submit Work & Earn)</option>
+            <option value="POSTER_BUSINESS">Business Poster / Client (Post Jobs, Assign & Settle)</option>
+            <option value="POSTER_INDIVIDUAL">Individual / Household Poster (Post Local Tasks)</option>
+          </select>
+        </div>
+
+        <div class="grid-2">
           <div class="field">
-            <label for="postTitle">Job Title</label>
-            <input type="text" id="postTitle" class="input" required value="3 Instagram Reels for Sovima Cafe" placeholder="e.g. 3 Instagram Reels for Local Brand" />
+            <label for="signupName">Full Name / Business Name</label>
+            <input type="text" id="signupName" class="input" required placeholder="e.g. Merenla Jamir" />
+          </div>
+          <div class="field">
+            <label for="signupEmail">Email Address</label>
+            <input type="email" id="signupEmail" class="input" required placeholder="merenla@college.edu.in" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="signupPassword">Create Password</label>
+            <input type="password" id="signupPassword" class="input" required minlength="6" placeholder="Min 6 characters" />
+          </div>
+          <div class="field">
+            <label for="signupCorridor">Campus / Town Corridor</label>
+            <select id="signupCorridor" class="select">
+              <option value="SOVIMA_6MILE">Sovima / 6th Mile</option>
+              <option value="CHUMOUKEDIMA">Chümoukedima</option>
+              <option value="DIMAPUR_TOWN">Dimapur Town</option>
+              <option value="KOHIMA_TOWN">Kohima Town</option>
+              <option value="JOTSOMA_MERIEMA">Jotsoma / Meriema</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="signupOrg">College / Organization Name</label>
+            <input type="text" id="signupOrg" class="input" required placeholder="e.g. Tetso College Sovima" />
+          </div>
+          <div class="field">
+            <label for="signupRoll">College Roll No. / Trade ID</label>
+            <input type="text" id="signupRoll" class="input mono" required placeholder="e.g. BCOM-2026-312" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="signupPhone">Mobile Number (+91)</label>
+            <input type="text" id="signupPhone" class="input mono" required placeholder="9862112233" />
+          </div>
+          <div class="field">
+            <label for="signupUpi">UPI ID (For Payouts / Refunds)</label>
+            <input type="text" id="signupUpi" class="input mono" required placeholder="name@okaxis" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="signupBio">Short Bio / Skills Summary</label>
+          <input type="text" id="signupBio" class="input" placeholder="e.g. Final year B.Com student skilled in Excel, GST & Reels" />
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full">Create Account & Sign In</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       2. AUTHENTICATED WORKSPACE SCREEN (STRICTLY ISOLATED BY USER ROLE)
+       ======================================================================== -->
+  <main id="appScreen" class="container hidden">
+
+    <div class="page-header">
+      <div>
+        <h1 class="page-title" id="pageTitle">Workspace</h1>
+        <p class="page-sub" id="pageSub"></p>
+      </div>
+      <div id="pageHeaderRight"></div>
+    </div>
+
+    <!-- ======================================================================
+         STUDENT TAB 1: BROWSE JOBS FEED (CLICK CARD TO READ FULL DESCRIPTION & APPLY)
+         ====================================================================== -->
+    <section id="view-student-feed" class="app-view hidden">
+      <div style="display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap;">
+        <input type="search" id="studentSearchInput" class="input" style="max-width:300px;" placeholder="Search active jobs..." />
+        <select id="studentCorridorSelect" class="select" style="width:auto;">
+          <option value="SOVIMA_6MILE">Corridor: Sovima / 6th Mile</option>
+          <option value="CHUMOUKEDIMA">Corridor: Chümoukedima</option>
+          <option value="DIMAPUR_TOWN">Corridor: Dimapur Town</option>
+          <option value="KOHIMA_TOWN">Corridor: Kohima Town</option>
+          <option value="JOTSOMA_MERIEMA">Corridor: Jotsoma / Meriema</option>
+        </select>
+      </div>
+      <div id="studentFeedGrid" class="cards-grid"></div>
+    </section>
+
+    <!-- ======================================================================
+         STUDENT TAB 2: MY ASSIGNED JOBS (SUBMIT PARTIAL / FINAL WORK OR QUIT)
+         ====================================================================== -->
+    <section id="view-student-assigned" class="app-view hidden">
+      <div id="studentAssignedContainer"></div>
+    </section>
+
+    <!-- ======================================================================
+         POSTER TAB 1: MY POSTED JOBS (ACTIVE -> APPLICANTS | ASSIGNED -> WORK | DELETED -> SETTLED)
+         ====================================================================== -->
+    <section id="view-poster-feed" class="app-view hidden">
+      <div style="display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm" id="filterPosterAll" onclick="window.setPosterFilter('ALL')">All My Jobs</button>
+        <button type="button" class="btn btn-sm" id="filterPosterActive" onclick="window.setPosterFilter('ACTIVE')">ACTIVE (Open & Applicants)</button>
+        <button type="button" class="btn btn-sm" id="filterPosterAssigned" onclick="window.setPosterFilter('ASSIGNED')">ASSIGNED (In Progress / Submitted)</button>
+        <button type="button" class="btn btn-sm" id="filterPosterDeleted" onclick="window.setPosterFilter('DELETED')">DELETED (Settled & Closed)</button>
+      </div>
+      <div id="posterJobsContainer"></div>
+    </section>
+
+    <!-- ======================================================================
+         POSTER TAB 2: CREATE NEW JOB (POSTER ONLY)
+         ====================================================================== -->
+    <section id="view-poster-create" class="app-view hidden">
+      <div class="card" style="max-width:680px;">
+        <form id="createJobForm" class="form-stack">
+          <div class="field">
+            <label for="jobTitle">Job Title</label>
+            <input type="text" id="jobTitle" class="input" required placeholder="e.g. Shoot 3 Product Reels for Local Store" />
           </div>
 
-          <div class="form-grid-3">
+          <div class="field">
+            <label for="jobDescription">Full Job Description (Shown to students when they click the job card)</label>
+            <textarea id="jobDescription" class="textarea" rows="3" required placeholder="Describe the project context, expectations, timing, and what students should know before applying..."></textarea>
+          </div>
+
+          <div class="grid-3">
             <div class="field">
-              <label for="postCategory">Category</label>
-              <select id="postCategory" class="select">
-                <option value="CONTENT_REELS" selected>Content & Reels (Min ₹500)</option>
+              <label for="jobCategory">Category</label>
+              <select id="jobCategory" class="select">
+                <option value="CONTENT_REELS">Content & Reels (Min ₹500)</option>
                 <option value="COMMERCE_OPS">Commerce & GST (Min ₹400)</option>
                 <option value="EVENTS_STALLS">Events & Stalls (Min ₹500)</option>
                 <option value="LANGUAGE_TUTOR">Language & Tutoring (Min ₹300)</option>
@@ -111,9 +238,9 @@
               </select>
             </div>
             <div class="field">
-              <label for="postCorridor">Location Corridor</label>
-              <select id="postCorridor" class="select">
-                <option value="SOVIMA_6MILE" selected>Sovima / 6th Mile</option>
+              <label for="jobCorridor">Location Corridor</label>
+              <select id="jobCorridor" class="select">
+                <option value="SOVIMA_6MILE">Sovima / 6th Mile</option>
                 <option value="CHUMOUKEDIMA">Chümoukedima</option>
                 <option value="DIMAPUR_TOWN">Dimapur Town</option>
                 <option value="KOHIMA_TOWN">Kohima Town</option>
@@ -121,100 +248,56 @@
               </select>
             </div>
             <div class="field">
-              <label for="postPayout">Payout (₹ INR)</label>
-              <input type="number" id="postPayout" class="input mono" min="300" step="50" required value="900" />
+              <label for="jobPayout">Locked Amount (₹ INR)</label>
+              <input type="number" id="jobPayout" class="input mono" min="300" step="50" required value="800" />
             </div>
           </div>
 
           <div class="field">
-            <label>3 Clear Deliverable Checkboxes (Scope Lock)</label>
-            <input type="text" id="postCrit1" class="input" required value="Shoot & edit 3 vertical 1080p reels (30-45 sec each)" placeholder="Deliverable 1" style="margin-bottom:8px;" />
-            <input type="text" id="postCrit2" class="input" required value="Include clear English/Nagamese captions and brand logo" placeholder="Deliverable 2" style="margin-bottom:8px;" />
-            <input type="text" id="postCrit3" class="input" required value="Upload final MP4 files to the MorungGig Delivery Vault" placeholder="Deliverable 3" />
+            <label>3 Deliverable Requirements (Scope Lock)</label>
+            <input type="text" id="jobCrit1" class="input" required placeholder="1. First deliverable milestone (min 10 chars)" style="margin-bottom:8px;" />
+            <input type="text" id="jobCrit2" class="input" required placeholder="2. Second deliverable milestone (min 10 chars)" style="margin-bottom:8px;" />
+            <input type="text" id="jobCrit3" class="input" required placeholder="3. Final deliverable submission requirement (min 10 chars)" />
           </div>
 
-          <div style="display:flex; justify-content:space-between; align-items:center; padding-top:6px;">
-            <label style="display:flex; align-items:center; gap:7px; font-size:13px; color:var(--text-secondary); cursor:pointer;">
-              <input type="checkbox" id="postAllowSquad" checked />
-              Allow 2-Student Squad (70% Lead / 30% Junior)
-            </label>
-            <span class="tag tag-sage" id="postFeeBadge">Escrow Fee: ₹45 (5%)</span>
-          </div>
-
-          <button type="submit" class="btn btn-primary btn-full" id="postSubmitBtn">
-            Post Job & Lock ₹945 UPI Escrow
-          </button>
+          <button type="submit" class="btn btn-primary btn-full">Lock Amount & Publish Job</button>
         </form>
       </div>
     </section>
 
-    <section id="sec-poster-jobs" class="portal-section hidden">
-      <div id="posterJobsList"></div>
-    </section>
-
-    <section id="sec-poster-settle" class="portal-section hidden">
-      <div id="posterSettleList"></div>
-    </section>
-
     <!-- ======================================================================
-         3. ARBITRATOR PORTAL VIEWS (ONLY VISIBLE TO EDC ARBITRATOR)
+         SHARED TAB 3: MY PROFILE & WALLET (STUDENT AVAILABILITY + MOCK WITHDRAWAL)
          ====================================================================== -->
-    <section id="sec-edc-disputes" class="portal-section hidden">
-      <div id="edcDisputesList"></div>
-    </section>
-
-    <section id="sec-edc-ledger" class="portal-section hidden">
-      <div id="edcLedgerList"></div>
+    <section id="view-user-profile" class="app-view hidden">
+      <div id="userProfileContainer"></div>
     </section>
 
   </main>
 
   <!-- ========================================================================
-       SIMPLE SIGN IN / ACCOUNT SWITCH MODAL
+       JOB DESCRIPTION & STUDENT APPLICATION MODAL (OPENS WHEN STUDENT CLICKS CARD)
        ======================================================================== -->
-  <div id="authModal" class="modal-backdrop hidden">
+  <div id="jobDetailModal" class="modal-backdrop hidden">
     <div class="modal-box">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <h3 style="font-size:16px; font-weight:650;">Sign In or Switch Account</h3>
-        <button type="button" class="btn btn-sm" id="closeAuthModalBtn">✕</button>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px;">
+        <div>
+          <span class="tag" id="modalJobTrack"></span>
+          <h3 style="font-size:18px; font-weight:650; margin-top:6px;" id="modalJobTitle"></h3>
+          <div style="font-size:12.5px; color:var(--text-secondary); margin-top:2px;" id="modalJobMeta"></div>
+        </div>
+        <button type="button" class="btn btn-sm" id="closeJobModalBtn">✕</button>
       </div>
 
-      <div class="form-stack">
-        <div class="field">
-          <label>Select Database Account (Enforces Role Permissions)</label>
-          <select id="accountSelectDropdown" class="select">
-            <optgroup label="Students (Can Only Browse, Accept & Submit Work)">
-              <option value="USR-STU-01" selected>Toshi Ao — Student (ICFAI Sovima)</option>
-              <option value="USR-STU-02">Imna Jamir — Student (Tetso College)</option>
-            </optgroup>
-            <optgroup label="Posters / Clients (Can Only Post, Hire & Settle Jobs)">
-              <option value="USR-POS-01">Abeni Lotha — Poster (Yes Coffee Dimapur)</option>
-              <option value="USR-POS-02">Mrs. Kevino Angami — Household Poster</option>
-            </optgroup>
-            <optgroup label="Arbitrator (Can Only Resolve Disputes)">
-              <option value="USR-EDC-01">Kezia Angami — YouthNet EDC Arbitrator</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <button type="button" class="btn btn-primary btn-full" id="confirmSwitchAccountBtn">
-          Switch to Selected Account
-        </button>
-
-        <div style="border-top:1px solid var(--border); padding-top:14px; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:12.5px; color:var(--text-secondary);">Or continue with Google OAuth 2.0</span>
-          <button type="button" class="btn btn-sm" id="googleSignInBtn">Google Sign-In</button>
-        </div>
-      </div>
+      <div id="modalJobBody"></div>
     </div>
   </div>
 
-  <!-- Toast -->
+  <!-- Toast Notification -->
   <div id="toastContainer" class="toast hidden" role="status" aria-live="polite">
     <div style="font-weight:650; margin-bottom:2px;" id="toastCode"></div>
     <div id="toastMessage"></div>
   </div>
 
   <script src="/app.js"></script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a4b49f277f496ed4',t:'MTc5MjEyODEwMw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

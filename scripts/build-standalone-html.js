@@ -172,12 +172,33 @@ ${validationContent}
     });
   };
 
+  const getStuAvailability = (u) => {
+    if (u.role !== 'STUDENT') return 'ACTIVE';
+    const hasAssigned = localDb.gigs.some(
+      (g) =>
+        (g.assigned_lead_id === u.user_id || g.assigned_junior_id === u.user_id) &&
+        !['SETTLED', 'AUTO_RELEASED', 'REFUNDED', 'ESCROW_LOCKED'].includes(g.state) &&
+        g.lifecycle_status !== 'DELETED'
+    );
+    if (hasAssigned) return 'WORKING';
+    return u.availability_status === 'OFFLINE' ? 'OFFLINE' : 'FREE';
+  };
+
+  const getGigLifecycle = (g) => {
+    if (['SETTLED', 'AUTO_RELEASED', 'REFUNDED'].includes(g.state) || g.lifecycle_status === 'DELETED') return 'DELETED';
+    if (g.assigned_lead_id || ['ASSIGNED_DIGITAL', 'ASSIGNED_OFFLINE', 'CHECKPOINT_VERIFIED', 'IN_PROGRESS_ONSITE', 'DELIVERED_VAULT', 'DISPUTED_EDC'].includes(g.state)) return 'ASSIGNED';
+    return 'ACTIVE';
+  };
+
   const sanitizeUser = (u) => ({
     ...u,
     visible_phone: u.contact_phone || u.masked_phone,
     trust_score: Number(u.trust_score),
     completed_gigs_cnt: Number(u.completed_gigs_cnt),
     wallet_balance_inr: Number(u.wallet_balance_inr),
+    availability_status: getStuAvailability(u),
+    bio: u.bio || '',
+    wallet_transactions: JSON.parse(u.wallet_transactions_json || '[]'),
     free_slots: JSON.parse(u.free_slots_json || '[]'),
     skills: JSON.parse(u.skills_json || '[]')
   });
@@ -222,8 +243,20 @@ ${validationContent}
     const vp = gig.vault_payload_json ? JSON.parse(gig.vault_payload_json) : null;
     const isUnlocked = gig.state === 'SETTLED' || gig.state === 'AUTO_RELEASED';
 
+    const rawApplicants = JSON.parse(gig.applicants_json || '[]');
+    const enrichedApplicants = rawApplicants.map((app) => {
+      const stu = localDb.users.find((u) => u.user_id === app.student_id);
+      return {
+        ...app,
+        availability_status: stu ? getStuAvailability(stu) : 'FREE'
+      };
+    });
+
     return {
       ...gig,
+      description: gig.description || (gig.title + ' — ' + gig.criteria_1),
+      lifecycle_status: getGigLifecycle(gig),
+      applicants: enrichedApplicants,
       payout_inr: Number(gig.payout_inr),
       platform_fee_inr: Number(gig.platform_fee_inr),
       revisions_left: Number(gig.revisions_left ?? 2),
@@ -313,9 +346,30 @@ ${validationContent}
       return { success: true, data: {} };
     }
 
+    if (pathname === '/api/v1/auth/me') {
+      const savedUid = safeGet('MG_SANDBOX_UID', '');
+      if (!savedUid) return { success: true, data: { authenticated: false, user: null } };
+      const u = localDb.users.find((x) => x.user_id === savedUid);
+      return { success: true, data: { authenticated: Boolean(u), user: u ? sanitizeUser(u) : null } };
+    }
+
+    if (pathname === '/api/v1/auth/login') {
+      const email = String(body.email || '').trim().toLowerCase();
+      const u = localDb.users.find((x) => String(x.email || '').toLowerCase() === email);
+      if (!u) throw { code: 'ERR-MG-AUTH-401', status: 401, detail: 'No account found with that email.' };
+      safeSet('MG_SANDBOX_UID', u.user_id);
+      return { success: true, data: { access_token: 'sandbox_jwt_' + u.user_id, user: sanitizeUser(u) } };
+    }
+
+    if (pathname === '/api/v1/auth/logout') {
+      safeRemove('MG_SANDBOX_UID');
+      return { success: true, data: { logged_out: true } };
+    }
+
     if (pathname === '/api/v1/auth/switch-role') {
       const u = localDb.users.find((x) => x.user_id === body.user_id) || localDb.users[0];
-      return { success: true, data: { access_token: 'sandbox_jwt', user: sanitizeUser(u) } };
+      safeSet('MG_SANDBOX_UID', u.user_id);
+      return { success: true, data: { access_token: 'sandbox_jwt_' + u.user_id, user: sanitizeUser(u) } };
     }
 
     if (pathname === '/api/v1/auth/google/url') {
@@ -338,11 +392,11 @@ ${validationContent}
       return { success: true, data: { access_token: 'sandbox_otp_jwt', user: sanitizeUser(u) } };
     }
 
-    if (pathname === '/api/v1/auth/onboard') {
+    if (pathname === '/api/v1/auth/onboard' || pathname === '/api/v1/auth/signup') {
       const role = body.role || 'STUDENT';
       const kycHash = role === 'STUDENT'
         ? browserStudentKycHash(body.college_code, body.roll_number)
-        : pureSha256Hex(role + ':' + body.org_or_aadhaar_last4 + ':MG_SALT_2026');
+        : pureSha256Hex(role + ':' + (body.org_or_aadhaar_last4 || body.roll_number || Date.now()) + ':MG_SALT_2026');
       if (localDb.users.some((u) => u.kyc_id_hash === kycHash)) {
         throw cfg.ERRORS['ERR-MG-1001'];
       }
@@ -350,6 +404,7 @@ ${validationContent}
       const newUser = {
         user_id: 'USR-NEW-' + String(Date.now()).slice(-3),
         role,
+        email: String(body.email || '').trim().toLowerCase(),
         full_name: stripHtmlAndNormalize(body.full_name || 'Verified User'),
         institution_or_org: body.institution_or_org || 'ICFAI University Sovima',
         stream_or_sector: 'Verified Onboarding',
@@ -361,12 +416,16 @@ ${validationContent}
         trust_score: 98.0,
         completed_gigs_cnt: 0,
         wallet_balance_inr: 0,
+        availability_status: role === 'STUDENT' ? 'FREE' : 'ACTIVE',
+        bio: body.bio || '',
+        wallet_transactions_json: '[]',
         exam_freeze_active: false,
         nda_accepted: true,
         free_slots_json: JSON.stringify(['WEEKDAY_AFTER_3PM', 'SATURDAY_ALL_DAY', 'ANYTIME_DIGITAL']),
         skills_json: JSON.stringify(['COMMERCE_OPS', 'CONTENT_REELS', 'EVENTS_STALLS', 'LANGUAGE_TUTOR'])
       };
       localDb.users.push(newUser);
+      safeSet('MG_SANDBOX_UID', newUser.user_id);
       saveDb();
       return {
         success: true,
@@ -376,6 +435,88 @@ ${validationContent}
           zero_raw_pii_proof: { salted_sha256_hash: kycHash, masked_phone_stored: masked }
         }
       };
+    }
+
+    if (pathname === '/api/v1/users/me/availability') {
+      const uid = body.actor_id || safeGet('MG_SANDBOX_UID', '');
+      const u = localDb.users.find((x) => x.user_id === uid);
+      if (!u) throw { code: 'ERR-MG-404', status: 404, detail: 'User not found' };
+      if (getStuAvailability(u) === 'WORKING') {
+        throw { code: 'ERR-MG-WORKING-LOCKED', status: 409, detail: 'Status is WORKING on an active assigned job.' };
+      }
+      u.availability_status = body.availability_status === 'OFFLINE' ? 'OFFLINE' : 'FREE';
+      saveDb();
+      return { success: true, data: { user: sanitizeUser(u) } };
+    }
+
+    if (pathname === '/api/v1/users/me/profile') {
+      const uid = body.actor_id || safeGet('MG_SANDBOX_UID', '');
+      const u = localDb.users.find((x) => x.user_id === uid);
+      if (!u) throw { code: 'ERR-MG-404', status: 404, detail: 'User not found' };
+      if (body.full_name) u.full_name = body.full_name;
+      if (body.institution_or_org) u.institution_or_org = body.institution_or_org;
+      if (body.corridor_cluster) u.corridor_cluster = body.corridor_cluster;
+      if (body.upi_vpa) u.upi_vpa = body.upi_vpa;
+      if (body.bio !== undefined) u.bio = body.bio;
+      saveDb();
+      return { success: true, data: { user: sanitizeUser(u) } };
+    }
+
+    if (pathname === '/api/v1/wallet/withdraw') {
+      const uid = body.actor_id || safeGet('MG_SANDBOX_UID', '');
+      const u = localDb.users.find((x) => x.user_id === uid);
+      if (!u) throw { code: 'ERR-MG-404', status: 404, detail: 'User not found' };
+      const amt = Number(body.amount_inr || 0);
+      if (amt <= 0 || amt > Number(u.wallet_balance_inr)) {
+        throw { code: 'ERR-MG-WD-402', status: 400, detail: 'Insufficient balance' };
+      }
+      u.wallet_balance_inr = Number(u.wallet_balance_inr) - amt;
+      const txs = JSON.parse(u.wallet_transactions_json || '[]');
+      const tx = {
+        tx_id: 'WD-UPI-' + String(Date.now()).slice(-6),
+        type: 'WITHDRAWAL',
+        amount_inr: -amt,
+        note: 'Mock Withdrawal to UPI (' + (body.upi_vpa || u.upi_vpa) + ')',
+        timestamp: new Date().toISOString()
+      };
+      txs.unshift(tx);
+      u.wallet_transactions_json = JSON.stringify(txs);
+      saveDb();
+      return { success: true, data: { withdrawal: tx, user: sanitizeUser(u) } };
+    }
+
+    const applyMatch = pathname.match(/^\\/api\\/v1\\/gigs\\/([^/]+)\\/apply$/);
+    if (applyMatch) {
+      const gig = localDb.gigs.find((g) => g.gig_id === decodeURIComponent(applyMatch[1]));
+      const uid = body.actor_id || safeGet('MG_SANDBOX_UID', '');
+      const stu = localDb.users.find((x) => x.user_id === uid);
+      const apps = JSON.parse(gig.applicants_json || '[]');
+      if (!apps.some((a) => a.student_id === stu.user_id)) {
+        apps.push({
+          student_id: stu.user_id,
+          full_name: stu.full_name,
+          institution: stu.institution_or_org,
+          pitch_note: body.pitch_note || 'Ready to start immediately.',
+          applied_at: new Date().toISOString()
+        });
+        gig.applicants_json = JSON.stringify(apps);
+        saveDb();
+      }
+      return { success: true, data: enrichGig(gig) };
+    }
+
+    const quitMatch = pathname.match(/^\\/api\\/v1\\/gigs\\/([^/]+)\\/quit$/);
+    if (quitMatch) {
+      const gig = localDb.gigs.find((g) => g.gig_id === decodeURIComponent(quitMatch[1]));
+      const prev = gig.assigned_lead_id;
+      gig.assigned_lead_id = null;
+      gig.assigned_junior_id = null;
+      gig.state = 'ESCROW_LOCKED';
+      gig.lifecycle_status = 'ACTIVE';
+      const stu = localDb.users.find((x) => x.user_id === prev);
+      if (stu) stu.availability_status = 'FREE';
+      saveDb();
+      return { success: true, data: enrichGig(gig) };
     }
 
     const freezeMatch = pathname.match(/^\\/api\\/v1\\/users\\/([^/]+)\\/exam-freeze$/);
@@ -445,10 +586,13 @@ ${validationContent}
     if (assignMatch) {
       const gig = localDb.gigs.find((g) => g.gig_id === decodeURIComponent(assignMatch[1]));
       if (!gig || gig.state !== 'ESCROW_LOCKED') throw cfg.ERRORS['ERR-MG-3001'];
-      gig.assigned_lead_id = body.lead_student_id || 'USR-STU-01';
-      gig.assigned_junior_id = body.execution_type === 'MORUNG_SQUAD_70_30' ? 'USR-STU-02' : null;
+      gig.assigned_lead_id = body.lead_student_id || 'USR-STU-02';
+      gig.assigned_junior_id = body.execution_type === 'MORUNG_SQUAD_70_30' ? 'USR-STU-03' : null;
       gig.standby_buddy_id = 'USR-STU-03';
       gig.execution_type = body.execution_type || 'SOLO';
+      gig.lifecycle_status = 'ASSIGNED';
+      const stu = localDb.users.find((u) => u.user_id === gig.assigned_lead_id);
+      if (stu) stu.availability_status = 'WORKING';
       if (gig.execution_mode === 'OFFLINE') {
         gig.start_pin = '4821'; gig.complete_pin = '9054'; gig.state = 'ASSIGNED_OFFLINE';
       } else {
@@ -587,11 +731,27 @@ ${validationContent}
     if (settleMatch) {
       const gig = localDb.gigs.find((g) => g.gig_id === decodeURIComponent(settleMatch[1]));
       gig.state = body.trigger_type === 'AUTO_RELEASE_36H' ? 'AUTO_RELEASED' : 'SETTLED';
+      gig.lifecycle_status = 'DELETED';
       const split = calculateEscrowAndSplit(gig.payout_inr, gig.execution_type);
       const stu1 = localDb.users.find((u) => u.user_id === (gig.assigned_lead_id || 'USR-STU-01'));
       const stu2 = gig.assigned_junior_id ? localDb.users.find((u) => u.user_id === gig.assigned_junior_id) : null;
-      if (stu1) stu1.wallet_balance_inr = Number(stu1.wallet_balance_inr) + split.leadPayoutInr;
-      if (stu2) stu2.wallet_balance_inr = Number(stu2.wallet_balance_inr) + split.juniorPayoutInr;
+      if (stu1) {
+        stu1.wallet_balance_inr = Number(stu1.wallet_balance_inr) + split.leadPayoutInr;
+        const txs = JSON.parse(stu1.wallet_transactions_json || '[]');
+        txs.unshift({
+          tx_id: 'TX-' + String(Date.now()).slice(-6),
+          type: 'GIG_SETTLEMENT_CREDIT',
+          amount_inr: split.leadPayoutInr,
+          note: 'Settled Job (' + gig.gig_id + '): ' + gig.title,
+          timestamp: new Date().toISOString()
+        });
+        stu1.wallet_transactions_json = JSON.stringify(txs);
+        stu1.availability_status = getStuAvailability(stu1);
+      }
+      if (stu2) {
+        stu2.wallet_balance_inr = Number(stu2.wallet_balance_inr) + split.juniorPayoutInr;
+        stu2.availability_status = getStuAvailability(stu2);
+      }
 
       const credId = 'MG-CRED-2026-' + (9000 + localDb.skill_credentials.length + 1);
       localDb.skill_credentials.unshift({
